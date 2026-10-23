@@ -32,11 +32,11 @@ export const serviceCategoriesData: ServiceCategory[] = [
     category: '02. COOKIE CATERING',
     tabLabel: 'COOKIE CATERING',
     tagline: 'FRESHLY BAKED, PERFECTLY CRISP & MADE TO SHARE',
-    title: 'Cookies & Muffins · ኩኪስ እና ማፊን',
+    title: 'Cookies',
     description:
-      'From classic butter cookies to rich chocolate creations and Ethiopian grain-inspired favorites, Perry Foods offers a delicious assortment for every taste and occasion. Perfect alongside Ethiopian coffee, served during office breaks, arranged on celebration tables, or packed into thoughtful gift boxes, our cookies and muffins bring a little sweetness to every gathering.',
+      'From classic orange and lemon cookies to rich grain-inspired favorites and comforting honey cookies, Perry Foods offers a delicious assortment for every taste and occasion. Perfect alongside Ethiopian coffee, served during office breaks, arranged on celebration tables, or packed into thoughtful gift boxes, our cookies bring a little sweetness to every gathering.',
     imageUrl: cookieImg,
-    altText: 'Perry Foods Cookies and Muffins Catering',
+    altText: 'Perry Foods Cookies Catering',
   },
   {
     id: 'cake',

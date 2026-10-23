@@ -39,7 +39,7 @@ export const MergedServicesAboutSection: React.FC<MergedServicesAboutSectionProp
   };
 
   return (
-    <section id="services" className="min-h-[90vh] sm:min-h-screen flex flex-col justify-center py-16 sm:py-24 bg-[#FFFCF8] dark:bg-[#171513] scroll-mt-20 border-b border-[#EDE5D9] dark:border-[#2E2A26] transition-colors">
+    <section id="services" className="py-12 sm:py-16 md:py-20 lg:py-24 bg-[#FFFCF8] dark:bg-[#171513] scroll-mt-20 border-b border-[#EDE5D9] dark:border-[#2E2A26] transition-colors">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Section Heading */}
         <SectionHeading
@@ -49,44 +49,43 @@ export const MergedServicesAboutSection: React.FC<MergedServicesAboutSectionProp
         />
 
         {/* Tailored Catering Services Category Showcase */}
-        <div className="mt-12 sm:mt-16">
-          <div className="text-center mb-10">
-            <h3 className="font-['Lexend'] text-2xl sm:text-3xl font-bold uppercase text-[#24211E] dark:text-[#F7F4EF] mt-1">
+        <div className="mt-10 sm:mt-14">
+          <div className="text-center mb-6 sm:mb-8">
+            <h3 className="font-['Lexend'] text-2xl sm:text-3xl font-bold uppercase text-[#24211E] dark:text-[#F7F4EF]">
               Tailored Service Categories
             </h3>
           </div>
 
-          {/* Category Selector Tabs - Fully displayed on tab and mobile with custom thin scrollbar */}
+          {/* Category Selector Tabs - Responsive wrapped pill bar fitting mobile, tablet, and desktop */}
           <div className="w-full flex items-center justify-center">
-            <div className="w-full max-w-5xl overflow-x-auto custom-thin-scrollbar pb-3 px-2 flex justify-start md:justify-center">
-              <div className="inline-flex items-center gap-1.5 sm:gap-2 p-1.5 bg-[#EDE5D9]/40 dark:bg-[#262320]/80 rounded-2xl border border-[#EDE5D9] dark:border-[#3A3530] shrink-0">
-                {serviceCategoriesData.map((cat, idx) => (
-                  <button
-                    key={cat.id}
-                    type="button"
-                    onClick={() => setSelectedCategoryIndex(idx)}
-                    className={`px-3.5 sm:px-4 py-2 text-xs sm:text-sm font-semibold rounded-xl whitespace-nowrap transition-all cursor-pointer focus-visible:outline-2 focus-visible:outline-[#F28A08] ${
-                      selectedCategoryIndex === idx
-                        ? 'bg-[#F28A08] text-white shadow-md font-bold'
-                        : 'bg-white dark:bg-[#201D1A] text-[#706A63] dark:text-[#A8A199] border border-transparent hover:text-[#24211E] dark:hover:text-white'
-                    }`}
-                  >
-                    {cat.tabLabel}
-                  </button>
-                ))}
-              </div>
+            <div className="flex flex-wrap items-center justify-center gap-1.5 sm:gap-2.5 p-1.5 sm:p-2 bg-[#EDE5D9]/50 dark:bg-[#262320]/80 rounded-2xl border border-[#EDE5D9] dark:border-[#3A3530] max-w-full shadow-sm">
+              {serviceCategoriesData.map((cat, idx) => (
+                <button
+                  key={cat.id}
+                  type="button"
+                  onClick={() => setSelectedCategoryIndex(idx)}
+                  className={`px-3 sm:px-4 py-2 sm:py-2.5 text-xs sm:text-sm font-semibold rounded-xl transition-all cursor-pointer text-center focus-visible:outline-2 focus-visible:outline-[#F28A08] ${
+                    selectedCategoryIndex === idx
+                      ? 'bg-[#F28A08] text-white shadow-md font-bold'
+                      : 'bg-white dark:bg-[#201D1A] text-[#706A63] dark:text-[#A8A199] border border-transparent hover:text-[#24211E] dark:hover:text-white'
+                  }`}
+                >
+                  {cat.tabLabel}
+                </button>
+              ))}
             </div>
           </div>
 
-          {/* Detailed Selected Service Spotlight - Responsive layout fitting tablet and desktop */}
+          {/* Detailed Selected Service Spotlight - Proportional responsive layout on mobile, tablet, and desktop */}
           <div
-            className="mt-6 sm:mt-8 rounded-2xl sm:rounded-3xl overflow-hidden border shadow-sm p-4 sm:p-6 md:p-7 lg:p-9 transition-all bg-white dark:bg-[#221F1C] border-[#EDE5D9] dark:border-[#3A3530]"
+            className="mt-6 sm:mt-8 max-w-5xl mx-auto rounded-2xl sm:rounded-3xl overflow-hidden border shadow-sm p-4 sm:p-6 md:p-8 lg:p-9 transition-all bg-white dark:bg-[#221F1C] border-[#EDE5D9] dark:border-[#3A3530]"
           >
             <div
               key={activeCategory.id}
-              className="grid grid-cols-1 md:grid-cols-12 gap-5 sm:gap-6 md:gap-7 lg:gap-8 items-center transition-opacity duration-300 ease-out"
+              className="grid grid-cols-1 lg:grid-cols-12 gap-6 sm:gap-8 lg:gap-10 items-center transition-opacity duration-300 ease-out"
             >
-              <div className="md:col-span-6 relative aspect-[16/10] sm:aspect-[16/10] md:aspect-[4/3] lg:aspect-[16/11] w-full rounded-xl sm:rounded-2xl overflow-hidden bg-[#EDE5D9]/40 dark:bg-[#2A2622] border border-[#EDE5D9] dark:border-[#3A3530] shadow-md group">
+              {/* Image container: stacks on mobile/tablet with rich 16:9 ratio, side-by-side on desktop */}
+              <div className="lg:col-span-6 relative aspect-[16/10] sm:aspect-[16/9] lg:aspect-[4/3] w-full rounded-xl sm:rounded-2xl overflow-hidden bg-[#EDE5D9]/40 dark:bg-[#2A2622] border border-[#EDE5D9] dark:border-[#3A3530] shadow-md group">
                 <SafeImage
                   src={activeCategory.imageUrl}
                   alt={activeCategory.altText}
@@ -95,12 +94,13 @@ export const MergedServicesAboutSection: React.FC<MergedServicesAboutSectionProp
                 />
               </div>
 
-              <div className="md:col-span-6 flex flex-col justify-between gap-4 sm:gap-5 md:gap-6">
+              {/* Text content: full width on mobile/tablet, right column on desktop */}
+              <div className="lg:col-span-6 flex flex-col justify-between gap-4 sm:gap-5 md:gap-6">
                 <div>
                   <span className="text-xs sm:text-sm font-semibold uppercase tracking-wider text-[#F28A08] font-['Lexend']">
                     {activeCategory.tagline}
                   </span>
-                  <h4 className="font-['Lexend'] text-2xl sm:text-3xl font-bold uppercase text-[#24211E] dark:text-[#F7F4EF] mt-1">
+                  <h4 className="font-['Lexend'] text-xl sm:text-2xl md:text-3xl font-bold uppercase text-[#24211E] dark:text-[#F7F4EF] mt-1 sm:mt-2">
                     {activeCategory.title}
                   </h4>
                   <p className="mt-3 text-sm sm:text-base text-[#706A63] dark:text-[#A8A199] leading-relaxed font-['Poppins']">

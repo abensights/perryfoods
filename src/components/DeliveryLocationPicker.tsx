@@ -77,7 +77,7 @@ export const calculateDistanceKm = (
  * - Buffet Package: 1-2 = 300, >= 3 = 400 Birr/km
  * - Agelgel: 1-2 = 200, 3-4 = 300, >= 5 = 400 Birr/km
  * - Cakes and pastries: 1-2 = 100, 3-4 = 200, >= 5 = 300 Birr/km
- * - Cookies and muffins: 1-3 = 100, 4 = 200, >= 5 = 300 Birr/km
+ * - Cookies: 1-3 = 100, 4 = 200, >= 5 = 300 Birr/km
  * - Traditional bread: 1-3 = 100, 4 = 200, >= 5 = 300 Birr/km
  */
 export const calculateDeliveryRatePerKm = (
@@ -126,7 +126,7 @@ export const calculateDeliveryRatePerKm = (
     else maxRate = Math.max(maxRate, 300);
   }
 
-  // 5. Cookies and muffins
+  // 5. Cookies
   const cookiesCount = orderItems
     .filter((e) => e.item.category === 'cookies-muffins')
     .reduce((acc, curr) => acc + curr.quantity, 0);

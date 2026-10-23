@@ -130,7 +130,7 @@ export const MenuSection: React.FC<MenuSectionProps> = ({
   }, [orderItems]);
 
   // Active categories with live orderable food cards in user requested order:
-  // 2. Traditional bread, 3. Cookies & Muffins, 4. Cakes & Pastries
+  // 2. Traditional bread, 3. Cookies, 4. Cakes & Pastries
   const sampleCategories = [
     'traditional-bread',
     'cookies-muffins',

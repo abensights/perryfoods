@@ -44,7 +44,7 @@ export const FoodCard: React.FC<FoodCardProps> = ({
           src={item.image}
           alt={item.imageAlt}
           fallbackTitle={item.name}
-          className="w-full h-full object-cover object-center transition-transform duration-500 group-hover:scale-105"
+          className={`w-full h-full object-cover object-center transition-transform duration-500 group-hover:scale-105 ${item.imageClassName || ''}`}
         />
       </div>
 

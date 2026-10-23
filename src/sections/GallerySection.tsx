@@ -124,7 +124,7 @@ export const GallerySection: React.FC = () => {
                         src={collection.mainPhoto.image}
                         alt={collection.mainPhoto.imageAlt}
                         fallbackTitle={collection.mainPhoto.title}
-                        className="w-full h-full object-cover object-center transition-transform duration-500 group-hover/main:scale-105"
+                        className={`w-full h-full object-cover object-center transition-transform duration-500 group-hover/main:scale-105 ${collection.mainPhoto.imageClassName || ''}`}
                       />
 
                       {/* Gentle hover overlay with Zoom icon */}
@@ -146,7 +146,7 @@ export const GallerySection: React.FC = () => {
                             src={thumb.image}
                             alt={thumb.imageAlt}
                             fallbackTitle={thumb.title}
-                            className="w-full h-full object-cover object-center transition-transform duration-300 group-hover/thumb:scale-110"
+                            className={`w-full h-full object-cover object-center transition-transform duration-300 group-hover/thumb:scale-110 ${thumb.imageClassName || ''}`}
                           />
                         </div>
                       ))}
@@ -216,7 +216,7 @@ export const GallerySection: React.FC = () => {
                       src={photo.image}
                       alt={photo.imageAlt}
                       fallbackTitle={photo.title}
-                      className="w-full h-full object-cover object-center transition-transform duration-300 group-hover:scale-105"
+                      className={`w-full h-full object-cover object-center transition-transform duration-300 group-hover:scale-105 ${photo.imageClassName || ''}`}
                     />
                     <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-center justify-center">
                       <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-white/90 text-[#24211E] flex items-center justify-center shadow-md">

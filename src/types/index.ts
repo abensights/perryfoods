@@ -43,6 +43,7 @@ export interface MenuItem {
   servesInfo?: string;
   priceLabel?: string;
   hideUnitSuffix?: boolean;
+  imageClassName?: string;
 }
 
 export interface GalleryItem {
