@@ -1,0 +1,173 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:is(.dark, .dark *));
+
+@theme {
+  --font-display: "Lexend", sans-serif;
+  --font-sans: "Poppins", system-ui, -apple-system, sans-serif;
+  --color-brand-orange: #F28A08;
+  --color-brand-orange-hover: #DB7A04;
+  --color-brand-bg: #FFFCF8;
+  --color-brand-charcoal: #24211E;
+  --color-brand-muted: #706A63;
+  --color-brand-border: #EDE5D9;
+}
+
+html {
+  scroll-behavior: smooth;
+  font-family: var(--font-sans);
+  background-color: #FFFCF8;
+  color: #24211E;
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+section[id] {
+  scroll-margin-top: 80px;
+}
+
+@media (max-width: 768px) {
+  section[id] {
+    scroll-margin-top: 72px;
+  }
+}
+
+html.dark {
+  background-color: #171513;
+  color: #F7F4EF;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-display);
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+}
+::-webkit-scrollbar-track {
+  background: #FFFCF8;
+}
+html.dark ::-webkit-scrollbar-track {
+  background: #171513;
+}
+::-webkit-scrollbar-thumb {
+  background: #EDE5D9;
+  border-radius: 4px;
+}
+html.dark ::-webkit-scrollbar-thumb {
+  background: #3A3530;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #F28A08;
+}
+
+/* Cinejoy style active dot progress fill animation */
+@keyframes dotProgressAnim {
+  0% {
+    width: 0%;
+  }
+  100% {
+    width: 100%;
+  }
+}
+
+/* Thinner and shorter scrollbar for tab/mobile category selection */
+.custom-thin-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: #F28A08 transparent;
+  -webkit-overflow-scrolling: touch;
+}
+
+.custom-thin-scrollbar::-webkit-scrollbar {
+  height: 4px;
+  width: 4px;
+}
+
+.custom-thin-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+  margin-left: 32px;
+  margin-right: 32px;
+}
+
+.custom-thin-scrollbar::-webkit-scrollbar-thumb {
+  background-color: #F28A08;
+  border-radius: 9999px;
+}
+
+/* Make native datepicker indicator yellow & clearly visible in dark mode */
+html.dark input[type="date"]::-webkit-calendar-picker-indicator,
+.dark input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: invert(80%) sepia(85%) saturate(1500%) hue-rotate(355deg) brightness(115%) contrast(105%) !important;
+  cursor: pointer;
+  opacity: 1 !important;
+  display: block;
+}
+
+input[type="date"]::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  opacity: 0.85;
+}
+
+input[type="date"]::-webkit-calendar-picker-indicator:hover {
+  opacity: 1;
+}
+
+.custom-thin-scrollbar::-webkit-scrollbar-thumb:hover {
+  background-color: #DB7A04;
+}
+
+/* Autofill typography & background in light mode */
+input:-webkit-autofill,
+input:-webkit-autofill:hover, 
+input:-webkit-autofill:focus, 
+input:-webkit-autofill:active,
+textarea:-webkit-autofill,
+textarea:-webkit-autofill:hover,
+textarea:-webkit-autofill:focus,
+textarea:-webkit-autofill:active,
+select:-webkit-autofill,
+select:-webkit-autofill:hover,
+select:-webkit-autofill:focus,
+select:-webkit-autofill:active {
+  -webkit-text-fill-color: #24211E !important;
+  color: #24211E !important;
+  caret-color: #24211E !important;
+  transition: background-color 500000s ease-in-out 0s !important;
+  box-shadow: 0 0 0 1000px transparent inset !important;
+  -webkit-box-shadow: 0 0 0 1000px transparent inset !important;
+  background-color: transparent !important;
+}
+
+/* Autofill typography in dark mode - text is pure white and clearly visible */
+html.dark input:-webkit-autofill,
+html.dark input:-webkit-autofill:hover, 
+html.dark input:-webkit-autofill:focus, 
+html.dark input:-webkit-autofill:active,
+html.dark textarea:-webkit-autofill,
+html.dark textarea:-webkit-autofill:hover,
+html.dark textarea:-webkit-autofill:focus,
+html.dark textarea:-webkit-autofill:active,
+html.dark select:-webkit-autofill,
+html.dark select:-webkit-autofill:hover,
+html.dark select:-webkit-autofill:focus,
+html.dark select:-webkit-autofill:active,
+.dark input:-webkit-autofill,
+.dark input:-webkit-autofill:hover, 
+.dark input:-webkit-autofill:focus, 
+.dark input:-webkit-autofill:active,
+.dark textarea:-webkit-autofill,
+.dark textarea:-webkit-autofill:hover,
+.dark textarea:-webkit-autofill:focus,
+.dark textarea:-webkit-autofill:active,
+.dark select:-webkit-autofill,
+.dark select:-webkit-autofill:hover,
+.dark select:-webkit-autofill:focus,
+.dark select:-webkit-autofill:active {
+  -webkit-text-fill-color: #FFFFFF !important;
+  color: #FFFFFF !important;
+  caret-color: #FFFFFF !important;
+  transition: background-color 500000s ease-in-out 0s !important;
+  box-shadow: 0 0 0 1000px transparent inset !important;
+  -webkit-box-shadow: 0 0 0 1000px transparent inset !important;
+  background-color: transparent !important;
+}

@@ -1,0 +1,6 @@
+{
+  "name": "Perry Foods",
+  "description": "Explore Perry Foods catering services for weddings, corporate events, buffets, celebration cakes, pastries, desserts, and quick bites.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
