@@ -146,9 +146,16 @@ export const MenuSection: React.FC<MenuSectionProps> = ({
     : menuItemsData.filter((item) => item.category === activeFilter);
 
   const navigateToCheckout = () => {
-    const el = document.querySelector('#my-order');
+    // On tablet and mobile mode (< 1024px), scroll directly to the Order Details form section instead of Selected Items
+    const isTabOrMobile = typeof window !== 'undefined' && window.innerWidth < 1024;
+    const targetSelector = isTabOrMobile ? '#order-details-section' : '#my-order';
+    const el =
+      document.querySelector(targetSelector) ||
+      document.querySelector('#order-details-section') ||
+      document.querySelector('#my-order');
+
     if (el) {
-      const headerOffset = window.innerWidth < 768 ? 80 : 96;
+      const headerOffset = window.innerWidth < 768 ? 70 : 85;
       const elementPosition = el.getBoundingClientRect().top;
       const offsetPosition = elementPosition + window.pageYOffset - headerOffset;
       window.scrollTo({

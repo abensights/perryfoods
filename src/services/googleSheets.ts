@@ -30,8 +30,9 @@ export interface OrderSheetPayload {
 
 /**
  * Register order using the user's deployed Google Apps Script Web App URL.
- * Fires a single clean POST request without secondary concurrent backups to avoid duplication,
- * and saves to persistent Firestore for multi-attribute tracking.
+ * Uses GET requests which are natively supported by the Apps Script doGet(e) endpoint
+ * with full CORS Access-Control-Allow-Origin: * headers, plus image beacon fallback.
+ * Also persists order to Firestore for instant exact tracking by Name, Phone, and Order ID.
  */
 export async function appendOrderToGoogleSheet(
   order: OrderSheetPayload
@@ -44,7 +45,7 @@ export async function appendOrderToGoogleSheet(
     console.warn('Firestore order save background warning:', err);
   });
 
-  const payload = {
+  const payload: Record<string, string> = {
     action: 'register',
     orderNo: order.orderNo,
     name: order.customerName,
@@ -60,18 +61,46 @@ export async function appendOrderToGoogleSheet(
     orderDelivered: deliveredStatus,
   };
 
-  const params = new URLSearchParams(payload as Record<string, string>);
+  const params = new URLSearchParams(payload);
   const fullUrl = `${PERRY_APPS_SCRIPT_WEB_APP_URL}?${params.toString()}`;
 
+  // 1. Primary: Direct GET fetch (Google Apps Script doGet sends Access-Control-Allow-Origin: *)
   try {
-    // Fire a single clean request
+    const res = await fetch(fullUrl, { method: 'GET' });
+    if (res.ok) {
+      try {
+        const json = await res.json();
+        console.log('Order registered in Google Sheet successfully:', json);
+        return {
+          success: true,
+          message: json.message || 'Order registered in Google Sheet!',
+        };
+      } catch {
+        // Non-JSON or opaque response followed
+      }
+    }
+  } catch (err) {
+    console.warn('Primary GET fetch encountered network limitation, attempting fallbacks:', err);
+  }
+
+  // 2. Secondary: Fallback with no-cors GET for strict browser sandbox policies
+  try {
     await fetch(fullUrl, {
-      method: 'POST',
+      method: 'GET',
       mode: 'no-cors',
     });
-    console.log('Order registered successfully without duplication.');
-  } catch (error) {
-    console.warn('Failed to register order:', error);
+  } catch (noCorsErr) {
+    console.warn('no-cors GET registration fallback warning:', noCorsErr);
+  }
+
+  // 3. Tertiary: Browser image beacon fallback (image GET requests bypass CORS in all browsers)
+  try {
+    if (typeof window !== 'undefined' && typeof Image !== 'undefined') {
+      const img = new Image();
+      img.src = fullUrl;
+    }
+  } catch (imgErr) {
+    console.warn('Image beacon ping warning:', imgErr);
   }
 
   return {

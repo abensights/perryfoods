@@ -577,7 +577,9 @@ export const MyOrderSection: React.FC<MyOrderSectionProps> = ({
     saveOrderToFirestore(orderPayload).catch((err) => {
       console.warn('Firestore direct write warning:', err);
     });
-    appendOrderToGoogleSheet(orderPayload);
+    appendOrderToGoogleSheet(orderPayload).catch((err) => {
+      console.warn('Google Sheet append warning:', err);
+    });
   };
 
   const handleResetForNewOrder = () => {
@@ -801,7 +803,7 @@ export const MyOrderSection: React.FC<MyOrderSectionProps> = ({
         /* Order Content Grid */
         <div className="p-4 sm:p-6 lg:p-8 grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 items-start">
           {/* Left Column: Order Items List */}
-          <div className="lg:col-span-7 flex flex-col gap-4">
+          <div id="selected-items-section" className="lg:col-span-7 flex flex-col gap-4 scroll-mt-24">
             <div className="p-4 sm:p-5 lg:p-6 rounded-2xl bg-[#FFFCF8] dark:bg-[#25211D] border border-[#EDE5D9] dark:border-[#38332E] shadow-xs flex flex-col gap-3.5 sm:gap-4">
               <div className="flex items-center justify-between pb-3 border-b border-[#EDE5D9] dark:border-[#38332E]">
                 <h4 className="font-['Lexend'] text-base sm:text-lg font-bold uppercase tracking-tight text-[#24211E] dark:text-[#F7F4EF]">
@@ -1174,7 +1176,7 @@ export const MyOrderSection: React.FC<MyOrderSectionProps> = ({
           </div>
 
           {/* Right Column: Order Details, Total Order, Bank Boxes & SMS message attachment */}
-          <div className="lg:col-span-5 flex flex-col gap-4">
+          <div id="order-details-section" className="lg:col-span-5 flex flex-col gap-4 scroll-mt-24">
             <div className="p-4 sm:p-5 lg:p-6 rounded-2xl bg-[#FFFCF8] dark:bg-[#25211D] border border-[#EDE5D9] dark:border-[#38332E] shadow-xs flex flex-col gap-3.5 sm:gap-4">
               <div className="flex items-center justify-between pb-3 border-b border-[#EDE5D9] dark:border-[#38332E]">
                 <h4 className="font-['Lexend'] text-base sm:text-lg font-bold uppercase tracking-tight text-[#24211E] dark:text-[#F7F4EF]">
