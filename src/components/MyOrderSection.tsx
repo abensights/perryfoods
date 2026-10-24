@@ -410,7 +410,9 @@ export const MyOrderSection: React.FC<MyOrderSectionProps> = ({
   const totalItemsCount = orderItems.reduce((acc, curr) => acc + curr.quantity, 0);
   const subtotalBirr = orderItems.reduce((acc, curr) => acc + curr.totalBirr, 0);
   const deliveryFeeBirr =
-    deliveryInfo.option === 'delivery' ? (deliveryInfo.deliveryFee || 100) : 0;
+    orderItems.length > 0 && deliveryInfo.option === 'delivery'
+      ? (deliveryInfo.deliveryFee || 100)
+      : 0;
   const totalBirr = subtotalBirr + deliveryFeeBirr;
 
   const selectedBank = BANK_OPTIONS.find((b) => b.id === selectedBankId) || null;
@@ -1272,7 +1274,7 @@ export const MyOrderSection: React.FC<MyOrderSectionProps> = ({
                   <div className="flex justify-between items-center text-[#706A63] dark:text-[#A8A199]">
                     <span className="text-[#706A63] dark:text-[#A8A199]">Delivery Charge:</span>
                     <span className="font-bold tabular-nums font-['Lexend'] text-[#F28A08]">
-                      {deliveryInfo.option === 'delivery'
+                      {deliveryInfo.option === 'delivery' && orderItems.length > 0
                         ? `+${deliveryFeeBirr.toLocaleString()} Birr`
                         : '0 Birr'}
                     </span>

@@ -452,12 +452,13 @@ const LeafletMap: React.FC<{
       attributionControl: false,
     });
 
-    const tileUrl = isDark
-      ? 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png'
-      : 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
+    // Use 100% free OpenStreetMap standard tiles with zero API keys required
+    const tileUrl = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
 
     L.tileLayer(tileUrl, {
       maxZoom: 19,
+      subdomains: ['a', 'b', 'c'],
+      attribution: '&copy; OpenStreetMap contributors',
     }).addTo(map);
 
     L.marker([STORE_ORIGIN.lat, STORE_ORIGIN.lng], {
@@ -488,7 +489,14 @@ const LeafletMap: React.FC<{
     const map = mapRef.current;
     if (!map) return;
 
+    // Ensure map tiles and dimensions are updated
+    setTimeout(() => {
+      map.invalidateSize();
+    }, 150);
+
     if (position) {
+      map.panTo([position.lat, position.lng]);
+
       if (destMarkerRef.current) {
         destMarkerRef.current.setLatLng([position.lat, position.lng]);
       } else {
@@ -526,9 +534,18 @@ const LeafletMap: React.FC<{
         ).addTo(map);
       }
     }
-  }, [position, onPositionSelect]);
+  }, [position, onPositionSelect, isDark]);
 
-  return <div ref={containerRef} className="w-full h-full rounded-xl overflow-hidden z-0" />;
+  return (
+    <div
+      ref={containerRef}
+      className={`w-full h-full rounded-xl overflow-hidden z-0 transition-all ${
+        isDark
+          ? '[&_.leaflet-tile]:invert [&_.leaflet-tile]:hue-rotate-180 [&_.leaflet-tile]:brightness-[0.75] [&_.leaflet-tile]:contrast-[1.2]'
+          : ''
+      }`}
+    />
+  );
 };
 
 export const DeliveryLocationPicker: React.FC<DeliveryLocationPickerProps> = ({
@@ -540,8 +557,32 @@ export const DeliveryLocationPicker: React.FC<DeliveryLocationPickerProps> = ({
   const { theme } = useTheme();
   const isDark = theme === 'dark';
 
+  const [googleMapsError, setGoogleMapsError] = useState(false);
   const [isLocating, setIsLocating] = useState(false);
   const [showMap, setShowMap] = useState(true);
+
+  // Fallback cleanly to OpenStreetMap if Google Maps throws an authentication failure on unconfigured domains
+  useEffect(() => {
+    const handleAuthFailure = () => {
+      console.warn('Google Maps authentication failed, falling back to OpenStreetMap.');
+      setGoogleMapsError(true);
+    };
+    const handleQuotaExceeded = () => {
+      setGoogleMapsError(true);
+    };
+
+    (window as any).gm_authFailure = handleAuthFailure;
+    window.addEventListener('gmp-quota-exceeded', handleQuotaExceeded);
+
+    return () => {
+      if ((window as any).gm_authFailure === handleAuthFailure) {
+        delete (window as any).gm_authFailure;
+      }
+      window.removeEventListener('gmp-quota-exceeded', handleQuotaExceeded);
+    };
+  }, []);
+
+  const canUseGoogleMaps = Boolean(apiKey && !googleMapsError);
 
   // Initial distance calculation if lat/lng are set
   const currentCoords = useMemo(() => {
@@ -615,24 +656,43 @@ export const DeliveryLocationPicker: React.FC<DeliveryLocationPickerProps> = ({
     street?: string,
     city?: string
   ) => {
-    const dist = calculateDistanceKm(
+    const rawDist = calculateDistanceKm(
       STORE_ORIGIN.lat,
       STORE_ORIGIN.lng,
       pos.lat,
       pos.lng
     );
-    const fee = calculateDeliveryFee(dist, orderItems);
-    const mapsUrl = `https://www.google.com/maps?q=${pos.lat.toFixed(6)},${pos.lng.toFixed(6)}`;
 
-    const resolvedStreet = street || value.streetName || 'Arbegnoch St';
-    const resolvedCity = city || value.cityName || 'Addis Ababa';
+    let effectivePos = pos;
+    let effectiveDist = rawDist;
+    let resolvedStreet = street || value.streetName || 'Arbegnoch St';
+    let resolvedCity = city || value.cityName || 'Addis Ababa';
+
+    // If coordinates are outside Addis Ababa (e.g. testing from overseas, cloud runner or VPN),
+    // adjust to central Addis Ababa (Bole area) to avoid astronomical thousands of km charges
+    if (rawDist > 35) {
+      effectivePos = { lat: 9.0054, lng: 38.7845 };
+      effectiveDist = calculateDistanceKm(
+        STORE_ORIGIN.lat,
+        STORE_ORIGIN.lng,
+        effectivePos.lat,
+        effectivePos.lng
+      );
+      resolvedStreet = 'Bole';
+      resolvedCity = 'Addis Ababa';
+      setGpsNotice('Device GPS is outside Addis Ababa. Pinned to central Addis Ababa.');
+      setTimeout(() => setGpsNotice(null), 5000);
+    }
+
+    const fee = calculateDeliveryFee(effectiveDist, orderItems);
+    const mapsUrl = `https://www.google.com/maps?q=${effectivePos.lat.toFixed(6)},${effectivePos.lng.toFixed(6)}`;
     const formattedAddress = `${resolvedStreet}, ${resolvedCity}`;
 
     onChange({
       ...value,
-      lat: pos.lat,
-      lng: pos.lng,
-      distanceKm: dist,
+      lat: effectivePos.lat,
+      lng: effectivePos.lng,
+      distanceKm: effectiveDist,
       deliveryFee: fee,
       mapsUrl,
       streetName: resolvedStreet,
@@ -781,7 +841,7 @@ export const DeliveryLocationPicker: React.FC<DeliveryLocationPickerProps> = ({
           {/* Interactive Map (Google Maps if API key is provided, or full Leaflet OpenStreetMap fallback for GitHub deployment) */}
           {showMap && (
             <div className="relative h-44 sm:h-48 min-h-[176px] sm:min-h-[192px] w-full rounded-xl overflow-hidden border border-[#EDE5D9] dark:border-[#38332E] shadow-sm">
-              {apiKey ? (
+              {canUseGoogleMaps ? (
                 <MapController
                   position={currentCoords}
                   onPositionSelect={handlePositionSelect}
@@ -801,5 +861,5 @@ export const DeliveryLocationPicker: React.FC<DeliveryLocationPickerProps> = ({
     </div>
   );
 
-  return apiKey ? <APIProvider apiKey={apiKey}>{content}</APIProvider> : content;
+  return canUseGoogleMaps ? <APIProvider apiKey={apiKey}>{content}</APIProvider> : content;
 };
