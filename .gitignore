@@ -7,4 +7,4 @@ coverage/
 .env*
 !.env.example
 .gmp_cache/
-
+.aistudio/

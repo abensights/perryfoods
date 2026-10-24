@@ -53,6 +53,8 @@ interface MenuSectionProps {
   }) => void;
 }
 
+import { validateAndSanitizeCart } from '../utils/cart';
+
 export const MenuSection: React.FC<MenuSectionProps> = ({
   onPlaceOrder,
   onInquireItem,
@@ -81,13 +83,13 @@ export const MenuSection: React.FC<MenuSectionProps> = ({
     return 'all';
   });
 
-  // Load persisted order items or start empty
+  // H5: Load persisted order items and sanitize strictly against static catalog
   const [orderItems, setOrderItems] = useState<OrderItemEntry[]>(() => {
     try {
       const saved = localStorage.getItem('perry_order_items');
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) return parsed;
+        return validateAndSanitizeCart(parsed);
       }
     } catch {
       // ignore

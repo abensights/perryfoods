@@ -16,13 +16,12 @@ import {
   MessageSquare,
   Search,
 } from 'lucide-react';
-import { appendOrderToGoogleSheet, fetchOrdersFromGoogleSheet, fetchOrderFromWebApp, LiveSheetOrder } from '../services/googleSheets';
+import { appendOrderToGoogleSheet, fetchOrderFromWebApp, LiveSheetOrder } from '../services/googleSheets';
 import {
   saveOrderToFirestore,
-  searchOrdersInFirestore,
-  updateOrderStatusInFirestore,
   isStrictExactOrderMatch,
 } from '../services/orderFirestore';
+import { generateSecureOrderId, validateAndSanitizeCart, cleanText } from '../utils/cart';
 import { DeliveryLocationPicker, DeliveryLocationData } from './DeliveryLocationPicker';
 
 import cbeLogo from '../assets/CBE.jpg';
@@ -125,35 +124,10 @@ export const MyOrderSection: React.FC<MyOrderSectionProps> = ({
   onOrderSubmittedStateChange,
   onConfirmOrderSubmit,
 }) => {
-  // Always start with blank input boxes if no order is placed or on page reload,
-  // and sync any existing local orders to Firestore so they are globally searchable by name & phone
+  // M2: Clear any draft state on mount. Does NOT re-upload local history to Firestore.
   React.useEffect(() => {
     try {
       localStorage.removeItem('perry_order_form_state');
-      const historyStr = localStorage.getItem('perry_orders_history');
-      if (historyStr) {
-        const history: OrderRecord[] = JSON.parse(historyStr);
-        history.forEach((loc) => {
-          saveOrderToFirestore({
-            orderNo: loc.orderNo,
-            customerName: loc.customerName,
-            phoneNumber: loc.phone,
-            deliveryLocation: loc.deliveryAddress || 'Shop Pickup (Arbegnoch St, Addis Ababa)',
-            deliveryOption: (loc.deliveryOption as any) || 'pickup',
-            deliveryAddress: loc.deliveryAddress || '',
-            deliveryFee: loc.deliveryFee || 0,
-            orderDate: loc.orderDate,
-            eventDeliveryDate: loc.deliveryDate,
-            totalAmountBirr: loc.totalAmountBirr,
-            bankName: loc.bank,
-            accountNumber: '',
-            paymentSms: '',
-            itemsSummary: loc.itemsSummary,
-            orderVerified: (loc as any).orderVerified || 'Pending',
-            orderDelivered: (loc as any).orderDelivered || 'Pending',
-          }).catch(() => {});
-        });
-      }
     } catch {
       // ignore
     }
@@ -222,7 +196,7 @@ export const MyOrderSection: React.FC<MyOrderSectionProps> = ({
   const handleSearchOrderStatus = async () => {
     const q = statusSearchQuery.trim();
     if (!q) {
-      setSearchStatusInputError('Please enter your Order ID (e.g. PF-...), phone number, or customer name.');
+      setSearchStatusInputError('Please enter your Order ID (e.g. PF-...).');
       return;
     }
 
@@ -231,176 +205,100 @@ export const MyOrderSection: React.FC<MyOrderSectionProps> = ({
     setLastSearchedQuery(q);
     setIsSearchingStatus(true);
 
-    const qPhone = normalizePhoneDigits(q);
-    const isCompletePhone = qPhone.length >= 7;
-
     try {
       const matches: LiveSheetOrder[] = [];
       const seenOrderNos = new Set<string>();
 
-      // 1. Search persistent Firestore (by Name, Phone number, or Order ID across all sessions)
-      try {
-        const firestoreMatches = await searchOrdersInFirestore(q);
-        firestoreMatches.forEach((m) => {
-          const norm = normalizeAlphanumeric(m.orderNo);
-          if (!seenOrderNos.has(norm)) {
-            seenOrderNos.add(norm);
-            matches.push(m);
-          }
-        });
-      } catch (fErr) {
-        console.warn('Firestore order search fallback:', fErr);
-      }
-
-      // Collect candidate Order IDs to check directly against the Apps Script doGet endpoint
-      const candidateOrderNos = new Set<string>();
-      candidateOrderNos.add(q);
-      if (!q.toUpperCase().startsWith('PF-')) {
-        candidateOrderNos.add(`PF-${q}`);
-      } else {
-        candidateOrderNos.add(q.replace(/^PF-?/i, ''));
-      }
-      matches.forEach((m) => {
-        if (m.orderNo) candidateOrderNos.add(m.orderNo);
-      });
-
-      // Check local history for complete phone number, customer name, or order number
-      const localMatchingOrderNos = new Set<string>();
+      // 1. Check local device history (for orders placed on this device)
       let localHistory: OrderRecord[] = [];
       try {
         const historyStr = localStorage.getItem('perry_orders_history');
         if (historyStr) {
           localHistory = JSON.parse(historyStr);
-          localHistory.forEach((o) => {
-            if (isExactOrderMatch(q, { orderNo: o.orderNo, customerName: o.customerName, phone: o.phone })) {
-              const normNo = normalizeAlphanumeric(o.orderNo);
-              if (normNo) localMatchingOrderNos.add(normNo);
-              if (o.orderNo) candidateOrderNos.add(o.orderNo);
-            }
-          });
         }
       } catch {
         // ignore
       }
 
-      // 2. Check Apps Script doGet endpoint for each candidate order number to sync real-time sheet verification status
+      // Collect candidate Order IDs to check against the sheet
+      const candidateOrderNos = new Set<string>();
+
+      // Check if query matches an order in local history (by Name, Phone, or Order ID)
+      const localMatches = localHistory.filter((o) =>
+        isStrictExactOrderMatch(q, {
+          orderNo: o.orderNo,
+          customerName: o.customerName,
+          phone: o.phone,
+        })
+      );
+
+      localMatches.forEach((loc) => {
+        if (loc.orderNo) candidateOrderNos.add(loc.orderNo.trim());
+      });
+
+      // If query is formatted like an Order ID, add it to candidate lookups
+      const isOrderIdFormat = /^PF-[A-Za-z0-9]{6,16}$/i.test(q) || /^\d{6,10}$/.test(q);
+      if (isOrderIdFormat) {
+        candidateOrderNos.add(q.trim());
+        if (!q.toUpperCase().startsWith('PF-')) {
+          candidateOrderNos.add(`PF-${q.trim()}`);
+        }
+      } else if (candidateOrderNos.size === 0) {
+        // User searched by Name or Phone, but this device has no local order record
+        setSearchStatusInputError(
+          'For customer privacy, name and phone lookups are only available on the device used to place the order. To track an order from any device, please enter the exact Order ID (e.g. PF-...).'
+        );
+        setTrackedOrders([]);
+        setIsSearchingStatus(false);
+        return;
+      }
+
+      // 2. Fetch live status by Order ID from Apps Script Web App
       for (const orderNoCandidate of candidateOrderNos) {
         if (!orderNoCandidate) continue;
         try {
           const webAppResult = await fetchOrderFromWebApp(orderNoCandidate);
-          if (webAppResult && webAppResult.orderNo && isStrictExactOrderMatch(q, webAppResult)) {
+          if (webAppResult && webAppResult.orderNo) {
             const norm = normalizeAlphanumeric(webAppResult.orderNo);
-            const existingIdx = matches.findIndex(
-              (m) => normalizeAlphanumeric(m.orderNo) === norm
-            );
-            if (existingIdx >= 0) {
-              matches[existingIdx] = {
-                ...matches[existingIdx],
-                orderVerified: webAppResult.orderVerified || matches[existingIdx].orderVerified,
-                orderDelivered: webAppResult.orderDelivered || matches[existingIdx].orderDelivered,
-              };
-              updateOrderStatusInFirestore(webAppResult.orderNo, {
-                orderVerified: webAppResult.orderVerified,
-                orderDelivered: webAppResult.orderDelivered,
-              }).catch(() => {});
-            } else {
+            if (!seenOrderNos.has(norm)) {
               seenOrderNos.add(norm);
-              matches.push(webAppResult);
-            }
-          }
-        } catch {
-          // ignore single candidate failure
-        }
-      }
-
-      // 3. Sync and merge local history orders with any newly discovered status
-      let historyUpdated = false;
-      localHistory.forEach((localOrder) => {
-        const localNorm = normalizeAlphanumeric(localOrder.orderNo);
-        const liveMatch = matches.find(
-          (m) => normalizeAlphanumeric(m.orderNo) === localNorm
-        );
-
-        if (liveMatch) {
-          if (liveMatch.orderVerified && (localOrder as any).orderVerified !== liveMatch.orderVerified) {
-            (localOrder as any).orderVerified = liveMatch.orderVerified;
-            historyUpdated = true;
-          }
-          if (liveMatch.orderDelivered && (localOrder as any).orderDelivered !== liveMatch.orderDelivered) {
-            (localOrder as any).orderDelivered = liveMatch.orderDelivered;
-            historyUpdated = true;
-          }
-        } else {
-          // If no remote record was found, fall back to locally saved order
-          if (
-            isExactOrderMatch(q, {
-              orderNo: localOrder.orderNo,
-              customerName: localOrder.customerName,
-              phone: localOrder.phone,
-            })
-          ) {
-            if (!seenOrderNos.has(localNorm)) {
-              seenOrderNos.add(localNorm);
+              const loc = localMatches.find(
+                (l) => normalizeAlphanumeric(l.orderNo) === norm
+              );
               matches.push({
-                orderNo: localOrder.orderNo,
-                customerName: localOrder.customerName,
-                itemsSummary: localOrder.itemsSummary,
-                deliveryDate: localOrder.deliveryDate,
-                totalAmount: `${localOrder.totalAmountBirr.toLocaleString()} Birr`,
-                bank: localOrder.bank,
-                account: '',
-                sms: '',
-                orderVerified: (localOrder as any).orderVerified || 'Pending',
-                orderDelivered: (localOrder as any).orderDelivered || 'Pending',
+                ...webAppResult,
+                customerName: loc ? loc.customerName : webAppResult.customerName,
               });
             }
           }
-        }
-      });
-
-      if (historyUpdated) {
-        try {
-          localStorage.setItem('perry_orders_history', JSON.stringify(localHistory));
         } catch {
           // ignore
         }
       }
 
-      setTrackedOrders(matches);
-    } catch (err: any) {
-      console.warn('Could not complete order lookup:', err);
-      // Fallback cleanly to local history matching without displaying error notice
-      try {
-        const historyStr = localStorage.getItem('perry_orders_history');
-        if (historyStr) {
-          const history: OrderRecord[] = JSON.parse(historyStr);
-          const localFallback = history
-            .filter((o) =>
-              isExactOrderMatch(q, {
-                orderNo: o.orderNo,
-                customerName: o.customerName,
-                phone: o.phone,
-              })
-            )
-            .map((o) => ({
-              orderNo: o.orderNo,
-              customerName: o.customerName,
-              itemsSummary: o.itemsSummary,
-              deliveryDate: o.deliveryDate,
-              totalAmount: `${o.totalAmountBirr.toLocaleString()} Birr`,
-              bank: o.bank,
-              account: '',
-              sms: '',
-              orderVerified: (o as any).orderVerified || 'Pending',
-              orderDelivered: (o as any).orderDelivered || 'Pending',
-            }));
-          setTrackedOrders(localFallback);
-        } else {
-          setTrackedOrders([]);
+      // 3. Fallback to local history record if web app check is still propagating
+      localMatches.forEach((localOrder) => {
+        const norm = normalizeAlphanumeric(localOrder.orderNo);
+        if (!seenOrderNos.has(norm)) {
+          seenOrderNos.add(norm);
+          matches.push({
+            orderNo: localOrder.orderNo,
+            customerName: localOrder.customerName,
+            itemsSummary: localOrder.itemsSummary,
+            deliveryDate: localOrder.deliveryDate,
+            totalAmount: `${localOrder.totalAmountBirr.toLocaleString()} Birr`,
+            bank: localOrder.bank,
+            account: '',
+            sms: '',
+            orderVerified: (localOrder as any).orderVerified || 'Pending',
+            orderDelivered: (localOrder as any).orderDelivered || 'Pending',
+          });
         }
-      } catch {
-        setTrackedOrders([]);
-      }
+      });
+
+      setTrackedOrders(matches);
+    } catch {
+      setTrackedOrders([]);
     } finally {
       setIsSearchingStatus(false);
     }
@@ -422,7 +320,9 @@ export const MyOrderSection: React.FC<MyOrderSectionProps> = ({
     setHasAttemptedSubmit(true);
     setSubmissionError(null);
 
-    if (orderItems.length === 0) {
+    // H5: Strictly re-verify and sanitize order items against static catalog
+    const validatedItems = validateAndSanitizeCart(orderItems);
+    if (validatedItems.length === 0) {
       setSubmissionError('Please select at least one item from the menu above to place an order.');
       return;
     }
@@ -443,20 +343,26 @@ export const MyOrderSection: React.FC<MyOrderSectionProps> = ({
       return;
     }
 
-    const ref = `PF-${Math.floor(100000 + Math.random() * 900000)}`;
-    const currentSms = paymentSms.trim();
-    const capturedPhone = phone.trim();
-    const capturedName = customerName.trim() || 'Valued Client';
+    // H1: Cryptographically secure, unguessable Order ID (e.g. PF-K7M2QX9TDA)
+    const ref = generateSecureOrderId();
+    const currentSms = cleanText(paymentSms, 500);
+    const capturedPhone = cleanText(phone.trim() || 'Not provided', 30);
+    const capturedName = cleanText(customerName.trim() || 'Valued Client', 100);
+
+    // Recompute total strictly from catalog prices and verified delivery fee
+    const verifiedSubtotal = validatedItems.reduce((acc, curr) => acc + curr.totalBirr, 0);
+    const verifiedDeliveryFee = deliveryInfo.option === 'delivery' ? (deliveryInfo.deliveryFee || 100) : 0;
+    const verifiedTotal = verifiedSubtotal + verifiedDeliveryFee;
 
     setOrderReference(ref);
-    setSubmittedItems([...orderItems]);
+    setSubmittedItems([...validatedItems]);
     setSubmittedPaymentSms(currentSms);
-    setSubmittedTotalBirr(totalBirr);
-    setSubmittedSubtotalBirr(subtotalBirr);
-    setSubmittedDeliveryFeeBirr(deliveryFeeBirr);
+    setSubmittedTotalBirr(verifiedTotal);
+    setSubmittedSubtotalBirr(verifiedSubtotal);
+    setSubmittedDeliveryFeeBirr(verifiedDeliveryFee);
     setSubmittedDeliveryInfo({ ...deliveryInfo });
 
-    // Clear active payment SMS input so the field is blank when returning or putting up a new request
+    // Clear active payment SMS input so the field is blank when returning
     setPaymentSms('');
     setOrderSubmitted(true);
     if (onOrderSubmittedStateChange) {
@@ -465,7 +371,7 @@ export const MyOrderSection: React.FC<MyOrderSectionProps> = ({
     // Remove active cart popup once success screen is displayed
     onClearOrder();
 
-    // Ensure the viewport stays directly on the success screen without snapping back to top of menu
+    // Ensure the viewport stays directly on the success screen
     setTimeout(() => {
       const el = document.getElementById('my-order');
       if (el) {
@@ -479,7 +385,7 @@ export const MyOrderSection: React.FC<MyOrderSectionProps> = ({
       }
     }, 60);
 
-    const itemsSummary = orderItems
+    const itemsSummary = validatedItems
       .map((entry) => {
         const isBuffet = entry.item.category === 'buffet';
         const minG = isBuffet ? (entry.item.minGuests || 30) : 1;
@@ -491,12 +397,12 @@ export const MyOrderSection: React.FC<MyOrderSectionProps> = ({
 
     if (onConfirmOrderSubmit) {
       onConfirmOrderSubmit({
-        items: orderItems,
-        totalBirr,
+        items: validatedItems,
+        totalBirr: verifiedTotal,
         customerName: capturedName,
-        phone: capturedPhone || 'Not provided',
+        phone: capturedPhone,
         date: deliveryDate || new Date().toISOString().split('T')[0],
-        remark,
+        remark: cleanText(remark, 250),
         selectedBank,
         paymentSms: currentSms,
       });
@@ -512,9 +418,9 @@ export const MyOrderSection: React.FC<MyOrderSectionProps> = ({
       deliveryOption: deliveryInfo.option,
       deliveryAddress: deliveryInfo.address,
       deliveryLocationUrl: deliveryInfo.mapsUrl,
-      deliveryFee: deliveryFeeBirr,
+      deliveryFee: verifiedDeliveryFee,
       distanceKm: deliveryInfo.distanceKm,
-      totalAmountBirr: totalBirr,
+      totalAmountBirr: verifiedTotal,
       itemsSummary,
       bank: selectedBank.shortName,
       status: 'Order Placed',
@@ -557,18 +463,18 @@ export const MyOrderSection: React.FC<MyOrderSectionProps> = ({
       deliveryOption: deliveryInfo.option,
       deliveryAddress: deliveryInfo.address,
       deliveryLocationUrl: deliveryInfo.mapsUrl,
-      deliveryFee: deliveryFeeBirr,
+      deliveryFee: verifiedDeliveryFee,
       deliveryCoordinates:
         deliveryInfo.lat && deliveryInfo.lng
           ? { lat: deliveryInfo.lat, lng: deliveryInfo.lng }
           : undefined,
       orderDate: new Date().toISOString().split('T')[0],
       eventDeliveryDate: deliveryDate || 'TBD',
-      totalAmountBirr: totalBirr,
+      totalAmountBirr: verifiedTotal,
       bankName: selectedBank.shortName,
       accountNumber: selectedBank.accountNumber,
       paymentSms: currentSms,
-      remark: remark.trim(),
+      remark: cleanText(remark, 250),
       itemsSummary,
       orderVerified: 'Pending',
       orderDelivered: 'Pending',
@@ -943,6 +849,7 @@ export const MyOrderSection: React.FC<MyOrderSectionProps> = ({
                           handleSearchOrderStatus();
                         }
                       }}
+                      maxLength={50}
                       placeholder="Order ID (e.g. PF-...), phone, or name..."
                       className="w-full pl-9 pr-3 py-2 text-xs sm:text-sm rounded-xl bg-white dark:bg-[#1E1B18] border border-[#EDE5D9] dark:border-[#38332E] text-[#24211E] dark:text-white placeholder-[#706A63]/60 focus:outline-none focus:border-[#F28A08] transition-colors"
                     />
@@ -1198,6 +1105,7 @@ export const MyOrderSection: React.FC<MyOrderSectionProps> = ({
                       name="customerName"
                       required
                       autoComplete="off"
+                      maxLength={100}
                       value={customerName}
                       onChange={(e) => setCustomerName(e.target.value)}
                       placeholder="e.g. Dawit Haile"
@@ -1219,6 +1127,7 @@ export const MyOrderSection: React.FC<MyOrderSectionProps> = ({
                         name="phoneNumber"
                         required
                         autoComplete="off"
+                        maxLength={30}
                         value={phone}
                         onChange={(e) => setPhone(e.target.value)}
                         placeholder="+251 91 123 4567"
@@ -1374,6 +1283,7 @@ export const MyOrderSection: React.FC<MyOrderSectionProps> = ({
                             required
                             rows={2}
                             autoComplete="off"
+                            maxLength={500}
                             value={paymentSms}
                             onChange={(e) => {
                               setPaymentSms(e.target.value);

@@ -5,21 +5,46 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
-    function isValidOrder(data) {
-      return data.orderNo is string && data.orderNo.size() <= 64 &&
-             data.customerName is string && data.customerName.size() <= 128 &&
-             data.totalAmountBirr is number &&
-             data.itemsSummary is string && data.itemsSummary.size() <= 1000;
-    }
-
     match /orders/{orderId} {
-      // Anyone can place an order from the website
-      allow create: if isValidOrder(request.resource.data);
-      // Anyone can track and read orders by ID, name, or phone number
-      allow read: if true;
-      // Allow syncing order status updates from Google Sheet
-      allow update: if request.resource.data.orderNo == resource.data.orderNo;
-      allow delete: if false;
+      // C1: Orders are write-only inbox; visitors cannot list or get existing orders
+      allow get, list: if false;
+
+      // C2 & H1: Strict validation on creation only
+      // Whitelist allowed fields, types, and length bounds
+      function isValidNewOrder() {
+        let d = request.resource.data;
+        let allowedKeys = [
+          'orderNo', 'customerName', 'customerNameLower',
+          'phoneNumber', 'phoneDigits', 'orderDate', 'eventDeliveryDate',
+          'deliveryOption', 'deliveryLocation', 'deliveryAddress', 'deliveryFee',
+          'totalAmountBirr', 'totalAmount', 'itemsSummary',
+          'bankName', 'accountNumber', 'paymentSms', 'remark',
+          'orderVerified', 'orderDelivered', 'createdAt'
+        ];
+
+        return d.keys().hasOnly(allowedKeys) &&
+               // Document ID must match orderNo
+               orderId == d.orderNo &&
+               // Cryptographic order number format PF-[2-9A-HJ-NP-Z]{10} or legacy PF-[0-9]{6}
+               d.orderNo is string &&
+               d.orderNo.matches('^PF-[2-9A-HJ-NP-Za-km-z0-9]{6,16}$') &&
+               // Customer details length limits
+               d.customerName is string && d.customerName.size() >= 1 && d.customerName.size() <= 100 &&
+               d.phoneNumber is string && d.phoneNumber.size() <= 30 &&
+               // Delivery option constraint
+               d.deliveryOption is string && (d.deliveryOption == 'pickup' || d.deliveryOption == 'delivery') &&
+               d.itemsSummary is string && d.itemsSummary.size() <= 1000 &&
+               // Reasonable total amounts: positive, capped at 1,000,000 Birr
+               d.totalAmountBirr is number && d.totalAmountBirr >= 0 && d.totalAmountBirr <= 1000000 &&
+               // Status must always be forced to 'Pending' on creation
+               d.orderVerified == 'Pending' &&
+               d.orderDelivered == 'Pending' &&
+               // CreatedAt timestamp sanity check
+               d.createdAt is number;
+      }
+
+      allow create: if isValidNewOrder();
+      allow update, delete: if false;
     }
   }
 }

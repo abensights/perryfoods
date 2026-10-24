@@ -32,7 +32,7 @@ export const QuoteForm: React.FC<QuoteFormProps> = ({
   // Restore filled Contact Us fields across reloads
   const savedContactData = React.useMemo(() => {
     try {
-      const saved = localStorage.getItem('perry_contact_form_data');
+      const saved = sessionStorage.getItem('perry_contact_form_data');
       if (saved) return JSON.parse(saved);
     } catch {
       // ignore
@@ -65,10 +65,10 @@ export const QuoteForm: React.FC<QuoteFormProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submissionResult, setSubmissionResult] = useState<InquirySubmissionResult | null>(null);
 
-  // Sync formData to localStorage on every change
+  // Sync formData to sessionStorage on every change
   useEffect(() => {
     try {
-      localStorage.setItem('perry_contact_form_data', JSON.stringify(formData));
+      sessionStorage.setItem('perry_contact_form_data', JSON.stringify(formData));
     } catch {
       // ignore
     }
@@ -188,7 +188,7 @@ export const QuoteForm: React.FC<QuoteFormProps> = ({
       setSubmissionResult(result);
       if (result.success) {
         try {
-          localStorage.removeItem('perry_contact_form_data');
+          sessionStorage.removeItem('perry_contact_form_data');
         } catch {
           // ignore
         }
@@ -224,7 +224,7 @@ export const QuoteForm: React.FC<QuoteFormProps> = ({
     setErrors({});
     setSubmissionResult(null);
     try {
-      localStorage.removeItem('perry_contact_form_data');
+      sessionStorage.removeItem('perry_contact_form_data');
     } catch {
       // ignore
     }
