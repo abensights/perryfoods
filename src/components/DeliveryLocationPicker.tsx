@@ -786,10 +786,10 @@ export const DeliveryLocationPicker: React.FC<DeliveryLocationPickerProps> = ({
             href="https://www.google.com/maps/search/?api=1&query=Arbegnoch+St,+Addis+Ababa"
             target="_blank"
             rel="noopener noreferrer"
-            title="Locate Perry Foods on Google Maps"
+            title="Open in Google Maps"
             className="text-[#706A63] dark:text-[#A8A199] font-['Poppins'] hover:text-[#F28A08] dark:hover:text-[#F28A08] transition-colors underline"
           >
-            Arbegnoch St, Addis Ababa (Locate Us)
+            Arbegnoch St, Addis Ababa
           </a>
         </div>
       )}

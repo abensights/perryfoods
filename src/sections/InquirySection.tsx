@@ -223,16 +223,13 @@ export const InquirySection: React.FC<InquirySectionProps> = ({
                     <MapPin className="w-5 h-5" />
                   </div>
                   <div className="min-w-0">
-                    <div className="flex items-center gap-1.5">
-                      <span
-                        className={`block text-[11px] uppercase tracking-wider font-semibold font-['Lexend'] ${
-                          isDark ? 'text-[#EDE5D9]/60' : 'text-[#706A63]'
-                        }`}
-                      >
-                        Kitchen Address
-                      </span>
-                      <span className="text-[10px] text-[#F28A08] font-bold">· Locate us</span>
-                    </div>
+                    <span
+                      className={`block text-[11px] uppercase tracking-wider font-semibold font-['Lexend'] ${
+                        isDark ? 'text-[#EDE5D9]/60' : 'text-[#706A63]'
+                      }`}
+                    >
+                      Kitchen Address
+                    </span>
                     <span
                       className={`block text-sm sm:text-base font-semibold truncate group-hover:text-[#F28A08] transition-colors ${
                         isDark ? 'text-[#FFFCF8]' : 'text-[#24211E]'

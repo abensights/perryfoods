@@ -160,7 +160,7 @@ export const Footer: React.FC = () => {
               >
                 <MapPin className="w-4 h-4 text-[#F28A08] shrink-0 group-hover:scale-110 transition-transform" />
                 <span className="text-xs sm:text-sm font-medium group-hover:underline">
-                  Arbegnoch St, Addis Ababa (Locate Us)
+                  Arbegnoch St, Addis Ababa
                 </span>
               </a>
               <div className="flex items-center gap-2.5">
