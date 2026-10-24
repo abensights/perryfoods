@@ -207,34 +207,41 @@ export const InquirySection: React.FC<InquirySectionProps> = ({
                   </div>
                 </div>
 
-                {/* Kitchen Address */}
-                <div
-                  className={`flex items-start gap-3.5 p-3 rounded-2xl border transition-all ${
+                {/* Kitchen Address / Locate Us */}
+                <a
+                  href="https://www.google.com/maps/search/?api=1&query=Arbegnoch+St,+Addis+Ababa"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  title="Locate Perry Foods on Google Maps"
+                  className={`group flex items-start gap-3.5 p-3 rounded-2xl border transition-all ${
                     isDark
-                      ? 'bg-white/5 border-white/10'
-                      : 'bg-white/80 border-[#EDE5D9] shadow-sm'
+                      ? 'bg-white/5 hover:bg-white/10 border-white/10'
+                      : 'bg-white/80 hover:bg-white border-[#EDE5D9] shadow-sm'
                   }`}
                 >
-                  <div className="w-10 h-10 rounded-xl bg-[#F28A08] text-white flex items-center justify-center shrink-0 shadow-sm">
+                  <div className="w-10 h-10 rounded-xl bg-[#F28A08] text-white flex items-center justify-center shrink-0 shadow-sm transition-transform group-hover:scale-105">
                     <MapPin className="w-5 h-5" />
                   </div>
                   <div className="min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <span
+                        className={`block text-[11px] uppercase tracking-wider font-semibold font-['Lexend'] ${
+                          isDark ? 'text-[#EDE5D9]/60' : 'text-[#706A63]'
+                        }`}
+                      >
+                        Kitchen Address
+                      </span>
+                      <span className="text-[10px] text-[#F28A08] font-bold">· Locate us</span>
+                    </div>
                     <span
-                      className={`block text-[11px] uppercase tracking-wider font-semibold font-['Lexend'] ${
-                        isDark ? 'text-[#EDE5D9]/60' : 'text-[#706A63]'
-                      }`}
-                    >
-                      Kitchen Address
-                    </span>
-                    <span
-                      className={`block text-sm sm:text-base font-semibold ${
+                      className={`block text-sm sm:text-base font-semibold truncate group-hover:text-[#F28A08] transition-colors ${
                         isDark ? 'text-[#FFFCF8]' : 'text-[#24211E]'
                       }`}
                     >
                       Arbegnoch St, Addis Ababa
                     </span>
                   </div>
-                </div>
+                </a>
               </div>
             </div>
           </div>

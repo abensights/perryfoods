@@ -1,0 +1,39 @@
+{
+  "entities": {
+    "Order": {
+      "title": "Order",
+      "description": "Customer catering order for Perry Foods",
+      "type": "object",
+      "properties": {
+        "orderNo": { "type": "string", "description": "Unique Order ID like PF-123456" },
+        "customerName": { "type": "string", "description": "Customer full name" },
+        "customerNameLower": { "type": "string", "description": "Lowercase customer name for searching" },
+        "phoneNumber": { "type": "string", "description": "Customer phone number" },
+        "phoneDigits": { "type": "string", "description": "Normalized phone digits" },
+        "orderDate": { "type": "string", "description": "Order creation date" },
+        "eventDeliveryDate": { "type": "string", "description": "Event or delivery date" },
+        "deliveryOption": { "type": "string", "description": "pickup or delivery" },
+        "deliveryLocation": { "type": "string", "description": "Formatted delivery location or pickup" },
+        "deliveryAddress": { "type": "string", "description": "Delivery street/city address" },
+        "deliveryFee": { "type": "number", "description": "Delivery fee in Birr" },
+        "totalAmountBirr": { "type": "number", "description": "Total amount in Birr" },
+        "totalAmount": { "type": "string", "description": "Formatted total amount" },
+        "itemsSummary": { "type": "string", "description": "Summary of ordered items" },
+        "bankName": { "type": "string", "description": "Selected payment bank" },
+        "accountNumber": { "type": "string", "description": "Bank account number" },
+        "paymentSms": { "type": "string", "description": "Payment confirmation SMS" },
+        "remark": { "type": "string", "description": "Special order instructions" },
+        "orderVerified": { "type": "string", "description": "Verification status: Pending or Verified" },
+        "orderDelivered": { "type": "string", "description": "Delivery status: Pending or Delivered" },
+        "createdAt": { "type": "number", "description": "Epoch timestamp" }
+      },
+      "required": ["orderNo", "customerName", "totalAmountBirr", "itemsSummary"]
+    }
+  },
+  "firestore": {
+    "/orders/{orderId}": {
+      "schema": "Order",
+      "description": "Collection of Perry Foods catering orders"
+    }
+  }
+}

@@ -33,36 +33,45 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
 
   const totalSlides = heroSlidesData.length;
 
+  // Preload all 6 hero images so cycling past the last slide (Cake) to the first slide is instant
+  useEffect(() => {
+    heroSlidesData.forEach((slide) => {
+      const img = new Image();
+      img.src = slide.imageUrl;
+    });
+  }, []);
+
+  const resetTimer = useCallback(() => {
+    if (timerRef.current) clearInterval(timerRef.current);
+    timerRef.current = setInterval(() => {
+      setCurrentIndex((prev) => (prev + 1) % totalSlides);
+    }, SLIDE_DURATION);
+  }, [totalSlides]);
+
   const nextSlide = useCallback(() => {
     setCurrentIndex((prev) => (prev + 1) % totalSlides);
-  }, [totalSlides]);
+    resetTimer();
+  }, [totalSlides, resetTimer]);
 
   const prevSlide = useCallback(() => {
     setCurrentIndex((prev) => (prev - 1 + totalSlides) % totalSlides);
-  }, [totalSlides]);
+    resetTimer();
+  }, [totalSlides, resetTimer]);
 
   const goToSlide = (index: number) => {
     setCurrentIndex(index);
+    resetTimer();
   };
 
-  // Continuous auto-play timer that works immediately on load without needing to scroll
-  // Only changes slides when the timer finishes or when dots are clicked (no hovering triggers)
-  // Continuous auto-play timer that works smoothly without overlooping
+  // Continuous auto-play timer that cycles through all slides reliably
   useEffect(() => {
-    const startTimer = () => {
-      if (timerRef.current) clearInterval(timerRef.current);
-      timerRef.current = setInterval(() => {
-        nextSlide();
-      }, SLIDE_DURATION);
-    };
-
-    startTimer();
+    resetTimer();
 
     const handleVisibilityChange = () => {
       if (document.hidden) {
         if (timerRef.current) clearInterval(timerRef.current);
       } else {
-        startTimer();
+        resetTimer();
       }
     };
 
@@ -72,7 +81,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
       if (timerRef.current) clearInterval(timerRef.current);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [currentIndex, nextSlide]);
+  }, [resetTimer]);
 
   // Touch swipe support for mobile without glitching
   const handleTouchStart = (e: React.TouchEvent) => {
@@ -89,6 +98,8 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
       nextSlide();
     } else if (diff < -50) {
       prevSlide();
+    } else {
+      resetTimer();
     }
     setTouchStartX(null);
   };
@@ -105,7 +116,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
       onTouchEnd={handleTouchEnd}
       aria-label="Welcome to Perry Foods Carousel"
     >
-      {/* Background Slides: Slower Cinematic Crossfade */}
+      {/* Background Slides: Seamless Crossfade with Explicit Stacking Order */}
       <div className="absolute inset-0 z-0">
         {heroSlidesData.map((slide, index) => {
           const isActive = index === currentIndex;
@@ -113,19 +124,20 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
           return (
             <div
               key={slide.id}
-              className={`absolute inset-0 transition-opacity duration-1200 ease-in-out ${
+              style={{ zIndex: isActive ? 10 : 0 }}
+              className={`absolute inset-0 transition-opacity duration-1000 ease-in-out ${
                 isActive
                   ? 'opacity-100 pointer-events-auto'
                   : 'opacity-0 pointer-events-none'
               }`}
             >
-              {/* Background Photography (Slide 0 uses Lunch Box.jpg) */}
+              {/* Background Photography */}
               <img
                 src={slide.imageUrl}
                 alt={slide.altText}
-                loading={index === 0 ? 'eager' : 'lazy'}
+                loading="eager"
                 decoding="async"
-                fetchPriority={index === 0 ? 'high' : 'auto'}
+                fetchPriority={isActive ? 'high' : 'low'}
                 className={`w-full h-full object-cover object-center transition-all duration-1000 ${
                   isDark
                     ? 'filter brightness-[0.78] contrast-[1.05]'
@@ -133,7 +145,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
                 }`}
               />
 
-              {/* Scrims: Dark Mode vs Light Mode Thin Transparent White Layering */}
+              {/* Scrims: Dark Mode vs Light Mode Thin Transparent Layering */}
               {isDark ? (
                 <>
                   <div className="absolute inset-0 bg-gradient-to-r from-black/90 via-black/65 to-black/30" />
@@ -142,10 +154,10 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
                 </>
               ) : (
                 <>
-                  {/* Light Mode: Thin transparent white layering so the photography remains clearly visible */}
+                  {/* Light Mode: Clean layering without backdrop-blur to avoid compositor locks */}
                   <div className="absolute inset-0 bg-gradient-to-r from-[#FFFCF8]/60 via-[#FFFCF8]/35 to-transparent" />
                   <div className="absolute inset-0 bg-gradient-to-t from-[#FFFCF8]/50 via-transparent to-transparent" />
-                  <div className="absolute inset-0 bg-white/10 backdrop-blur-[0.5px]" />
+                  <div className="absolute inset-0 bg-[#FFFCF8]/10" />
                   <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_80%_at_50%_20%,rgba(242,138,8,0.06),transparent)]" />
                 </>
               )}

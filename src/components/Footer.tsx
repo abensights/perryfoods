@@ -151,10 +151,18 @@ export const Footer: React.FC = () => {
                 <Phone className="w-4 h-4 text-[#F28A08] shrink-0" />
                 <span className="text-xs sm:text-sm font-medium">+251911458705</span>
               </a>
-              <div className="flex items-center gap-2.5">
-                <MapPin className="w-4 h-4 text-[#F28A08] shrink-0" />
-                <span className="text-xs sm:text-sm font-medium">Arbegnoch St, Addis Ababa</span>
-              </div>
+              <a
+                href="https://www.google.com/maps/search/?api=1&query=Arbegnoch+St,+Addis+Ababa"
+                target="_blank"
+                rel="noopener noreferrer"
+                title="Locate Perry Foods on Google Maps"
+                className="flex items-center gap-2.5 hover:text-[#F28A08] transition-colors group cursor-pointer"
+              >
+                <MapPin className="w-4 h-4 text-[#F28A08] shrink-0 group-hover:scale-110 transition-transform" />
+                <span className="text-xs sm:text-sm font-medium group-hover:underline">
+                  Arbegnoch St, Addis Ababa (Locate Us)
+                </span>
+              </a>
               <div className="flex items-center gap-2.5">
                 <Clock className="w-4 h-4 text-[#F28A08] shrink-0" />
                 <span className="text-xs sm:text-sm font-medium">2:00 - 12:00</span>

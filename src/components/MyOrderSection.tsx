@@ -17,6 +17,12 @@ import {
   Search,
 } from 'lucide-react';
 import { appendOrderToGoogleSheet, fetchOrdersFromGoogleSheet, fetchOrderFromWebApp, LiveSheetOrder } from '../services/googleSheets';
+import {
+  saveOrderToFirestore,
+  searchOrdersInFirestore,
+  updateOrderStatusInFirestore,
+  isStrictExactOrderMatch,
+} from '../services/orderFirestore';
 import { DeliveryLocationPicker, DeliveryLocationData } from './DeliveryLocationPicker';
 
 import cbeLogo from '../assets/CBE.jpg';
@@ -119,10 +125,35 @@ export const MyOrderSection: React.FC<MyOrderSectionProps> = ({
   onOrderSubmittedStateChange,
   onConfirmOrderSubmit,
 }) => {
-  // Always start with blank input boxes if no order is placed or on page reload
+  // Always start with blank input boxes if no order is placed or on page reload,
+  // and sync any existing local orders to Firestore so they are globally searchable by name & phone
   React.useEffect(() => {
     try {
       localStorage.removeItem('perry_order_form_state');
+      const historyStr = localStorage.getItem('perry_orders_history');
+      if (historyStr) {
+        const history: OrderRecord[] = JSON.parse(historyStr);
+        history.forEach((loc) => {
+          saveOrderToFirestore({
+            orderNo: loc.orderNo,
+            customerName: loc.customerName,
+            phoneNumber: loc.phone,
+            deliveryLocation: loc.deliveryAddress || 'Shop Pickup (Arbegnoch St, Addis Ababa)',
+            deliveryOption: (loc.deliveryOption as any) || 'pickup',
+            deliveryAddress: loc.deliveryAddress || '',
+            deliveryFee: loc.deliveryFee || 0,
+            orderDate: loc.orderDate,
+            eventDeliveryDate: loc.deliveryDate,
+            totalAmountBirr: loc.totalAmountBirr,
+            bankName: loc.bank,
+            accountNumber: '',
+            paymentSms: '',
+            itemsSummary: loc.itemsSummary,
+            orderVerified: (loc as any).orderVerified || 'Pending',
+            orderDelivered: (loc as any).orderDelivered || 'Pending',
+          }).catch(() => {});
+        });
+      }
     } catch {
       // ignore
     }
@@ -180,40 +211,12 @@ export const MyOrderSection: React.FC<MyOrderSectionProps> = ({
     return digits;
   };
 
-  // Matching helper: matches order ID, customer name, or phone number flexibly
+  // Matching helper: strict exact match only (neglects special characters and 0s added before/after)
   const isExactOrderMatch = (
     query: string,
-    target: { orderNo?: string; customerName?: string; phone?: string }
+    target: { orderNo?: string; customerName?: string; phone?: string; phoneNumber?: string }
   ): boolean => {
-    const qAlpha = normalizeAlphanumeric(query);
-    if (!qAlpha) return false;
-
-    // 1. Order Number: matches if equal or contains (e.g. digits "784912" matches "PF-784912")
-    if (target.orderNo) {
-      const orderAlpha = normalizeAlphanumeric(target.orderNo);
-      if (orderAlpha && (orderAlpha === qAlpha || orderAlpha.includes(qAlpha) || qAlpha.includes(orderAlpha))) {
-        return true;
-      }
-    }
-
-    // 2. Customer Name: matches if equal or contains (e.g. "Dawit" matches "Dawit Haile")
-    if (target.customerName) {
-      const nameAlpha = normalizeAlphanumeric(target.customerName);
-      if (nameAlpha && (nameAlpha === qAlpha || nameAlpha.includes(qAlpha) || qAlpha.includes(nameAlpha))) {
-        return true;
-      }
-    }
-
-    // 3. Phone Number
-    const qPhone = normalizePhoneDigits(query);
-    if (qPhone && qPhone.length >= 7 && target.phone) {
-      const targetPhone = normalizePhoneDigits(target.phone);
-      if (targetPhone && (targetPhone.includes(qPhone) || qPhone.includes(targetPhone))) {
-        return true;
-      }
-    }
-
-    return false;
+    return isStrictExactOrderMatch(query, target);
   };
 
   const handleSearchOrderStatus = async () => {
@@ -235,6 +238,20 @@ export const MyOrderSection: React.FC<MyOrderSectionProps> = ({
       const matches: LiveSheetOrder[] = [];
       const seenOrderNos = new Set<string>();
 
+      // 1. Search persistent Firestore (by Name, Phone number, or Order ID across all sessions)
+      try {
+        const firestoreMatches = await searchOrdersInFirestore(q);
+        firestoreMatches.forEach((m) => {
+          const norm = normalizeAlphanumeric(m.orderNo);
+          if (!seenOrderNos.has(norm)) {
+            seenOrderNos.add(norm);
+            matches.push(m);
+          }
+        });
+      } catch (fErr) {
+        console.warn('Firestore order search fallback:', fErr);
+      }
+
       // Collect candidate Order IDs to check directly against the Apps Script doGet endpoint
       const candidateOrderNos = new Set<string>();
       candidateOrderNos.add(q);
@@ -243,6 +260,9 @@ export const MyOrderSection: React.FC<MyOrderSectionProps> = ({
       } else {
         candidateOrderNos.add(q.replace(/^PF-?/i, ''));
       }
+      matches.forEach((m) => {
+        if (m.orderNo) candidateOrderNos.add(m.orderNo);
+      });
 
       // Check local history for complete phone number, customer name, or order number
       const localMatchingOrderNos = new Set<string>();
@@ -263,14 +283,27 @@ export const MyOrderSection: React.FC<MyOrderSectionProps> = ({
         // ignore
       }
 
-      // 1. Check Apps Script doGet endpoint for each candidate order number
+      // 2. Check Apps Script doGet endpoint for each candidate order number to sync real-time sheet verification status
       for (const orderNoCandidate of candidateOrderNos) {
         if (!orderNoCandidate) continue;
         try {
           const webAppResult = await fetchOrderFromWebApp(orderNoCandidate);
-          if (webAppResult && webAppResult.orderNo) {
+          if (webAppResult && webAppResult.orderNo && isStrictExactOrderMatch(q, webAppResult)) {
             const norm = normalizeAlphanumeric(webAppResult.orderNo);
-            if (!seenOrderNos.has(norm)) {
+            const existingIdx = matches.findIndex(
+              (m) => normalizeAlphanumeric(m.orderNo) === norm
+            );
+            if (existingIdx >= 0) {
+              matches[existingIdx] = {
+                ...matches[existingIdx],
+                orderVerified: webAppResult.orderVerified || matches[existingIdx].orderVerified,
+                orderDelivered: webAppResult.orderDelivered || matches[existingIdx].orderDelivered,
+              };
+              updateOrderStatusInFirestore(webAppResult.orderNo, {
+                orderVerified: webAppResult.orderVerified,
+                orderDelivered: webAppResult.orderDelivered,
+              }).catch(() => {});
+            } else {
               seenOrderNos.add(norm);
               matches.push(webAppResult);
             }
@@ -278,38 +311,6 @@ export const MyOrderSection: React.FC<MyOrderSectionProps> = ({
         } catch {
           // ignore single candidate failure
         }
-      }
-
-      // 2. Fetch from Google Sheet table (via OAuth or GViz) if available
-      try {
-        const liveOrders = await fetchOrdersFromGoogleSheet();
-        liveOrders.forEach((o) => {
-          const norm = normalizeAlphanumeric(o.orderNo);
-          const isMatch =
-            isExactOrderMatch(q, { orderNo: o.orderNo, customerName: o.customerName }) ||
-            (norm && localMatchingOrderNos.has(norm)) ||
-            (isCompletePhone &&
-              ((o.phoneNumber && normalizePhoneDigits(o.phoneNumber) === qPhone) ||
-                (o.account && normalizePhoneDigits(o.account) === qPhone) ||
-                (o.sms &&
-                  (o.sms.match(/(?:\+?251|0)[79]\d{8}/g) || []).some(
-                    (p) => normalizePhoneDigits(p) === qPhone
-                  ))));
-
-          if (isMatch) {
-            const existingIdx = matches.findIndex(
-              (m) => normalizeAlphanumeric(m.orderNo) === norm
-            );
-            if (existingIdx >= 0) {
-              matches[existingIdx] = { ...matches[existingIdx], ...o };
-            } else {
-              seenOrderNos.add(norm);
-              matches.push(o);
-            }
-          }
-        });
-      } catch {
-        // Google Sheet table query skipped if restricted
       }
 
       // 3. Sync and merge local history orders with any newly discovered status
@@ -545,8 +546,8 @@ export const MyOrderSection: React.FC<MyOrderSectionProps> = ({
           }${deliveryInfo.mapsUrl ? ` [Map Pin: ${deliveryInfo.mapsUrl}]` : ''}`
         : 'Shop Pickup (Arbegnoch St, Addis Ababa)';
 
-    // Automatically send order, location info, and Google Maps pin to Google Sheet
-    appendOrderToGoogleSheet({
+    // Automatically send order, location info, and Google Maps pin to Firestore and Google Sheet
+    const orderPayload = {
       orderNo: ref,
       customerName: capturedName,
       phoneNumber: capturedPhone,
@@ -569,7 +570,12 @@ export const MyOrderSection: React.FC<MyOrderSectionProps> = ({
       itemsSummary,
       orderVerified: 'Pending',
       orderDelivered: 'Pending',
+    };
+
+    saveOrderToFirestore(orderPayload).catch((err) => {
+      console.warn('Firestore direct write warning:', err);
     });
+    appendOrderToGoogleSheet(orderPayload);
   };
 
   const handleResetForNewOrder = () => {

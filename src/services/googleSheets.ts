@@ -1,4 +1,5 @@
 import { getAccessToken } from './auth';
+import { saveOrderToFirestore } from './orderFirestore';
 
 export const PERRY_SPREADSHEET_ID = '1PyNFQmiE0v7cyBgLvU8uGv_zdG3Ydyh4EInCWJWM9E0';
 export const PERRY_SPREADSHEET_URL = `https://docs.google.com/spreadsheets/d/${PERRY_SPREADSHEET_ID}/edit?usp=sharing`;
@@ -29,13 +30,19 @@ export interface OrderSheetPayload {
 
 /**
  * Register order using the user's deployed Google Apps Script Web App URL.
- * Fires a single clean POST request without secondary concurrent backups to avoid duplication.
+ * Fires a single clean POST request without secondary concurrent backups to avoid duplication,
+ * and saves to persistent Firestore for multi-attribute tracking.
  */
 export async function appendOrderToGoogleSheet(
   order: OrderSheetPayload
 ): Promise<{ success: boolean; message: string }> {
   const verifiedStatus = order.orderVerified || 'Pending';
   const deliveredStatus = order.orderDelivered || 'Pending';
+
+  // Persist order in Firestore for instant search by Name, Phone, and Order ID
+  saveOrderToFirestore(order).catch((err) => {
+    console.warn('Firestore order save background warning:', err);
+  });
 
   const payload = {
     action: 'register',

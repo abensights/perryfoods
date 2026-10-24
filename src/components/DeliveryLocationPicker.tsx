@@ -1,7 +1,9 @@
 /// <reference types="@types/google.maps" />
 
 // Source: Google Maps Platform Code Assist
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
 import {
   APIProvider,
   Map,
@@ -361,6 +363,174 @@ const MapController: React.FC<{
   );
 };
 
+export const reverseGeocodeNominatim = async (
+  lat: number,
+  lng: number
+): Promise<{ street: string; city: string }> => {
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 4000);
+    const res = await fetch(
+      `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}`,
+      {
+        headers: { 'Accept-Language': 'en' },
+        signal: controller.signal,
+      }
+    );
+    clearTimeout(timeoutId);
+    if (res.ok) {
+      const data = await res.json();
+      const addr = data.address || {};
+      const street =
+        addr.road ||
+        addr.suburb ||
+        addr.neighbourhood ||
+        addr.quarter ||
+        addr.commercial ||
+        'Addis Ababa Location';
+      const city = addr.city || addr.town || addr.municipality || 'Addis Ababa';
+      return { street, city };
+    }
+  } catch (err) {
+    console.warn('Reverse geocoding error:', err);
+  }
+  return { street: 'Pinned Location', city: 'Addis Ababa' };
+};
+
+const createKitchenIcon = () => {
+  return L.divIcon({
+    className: 'custom-kitchen-marker',
+    html: `
+      <div style="display:flex;flex-direction:column;align-items:center;transform:translate(-50%,-100%);pointer-events:none;">
+        <span style="background:#24211E;color:#FFFFFF;border:1px solid #F28A08;padding:2px 6px;border-radius:6px;font-size:10px;font-weight:700;font-family:Lexend,sans-serif;white-space:nowrap;margin-bottom:2px;box-shadow:0 2px 6px rgba(0,0,0,0.35);">Perry Kitchen</span>
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="#24211E" stroke="#F28A08" stroke-width="2">
+          <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/>
+          <circle cx="12" cy="9" r="2.5" fill="#F28A08"/>
+        </svg>
+      </div>
+    `,
+    iconSize: [0, 0],
+    iconAnchor: [0, 0],
+  });
+};
+
+const createDestinationIcon = () => {
+  return L.divIcon({
+    className: 'custom-destination-marker',
+    html: `
+      <div style="display:flex;flex-direction:column;align-items:center;transform:translate(-50%,-100%);cursor:grab;">
+        <span style="background:#F28A08;color:#FFFFFF;border:1px solid #FFFFFF;padding:2px 6px;border-radius:6px;font-size:10px;font-weight:700;font-family:Lexend,sans-serif;white-space:nowrap;margin-bottom:2px;box-shadow:0 2px 6px rgba(242,138,8,0.4);">Pinned Destination</span>
+        <svg width="30" height="30" viewBox="0 0 24 24" fill="#F28A08" stroke="#FFFFFF" stroke-width="2">
+          <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/>
+          <circle cx="12" cy="9" r="3" fill="#FFFFFF"/>
+        </svg>
+      </div>
+    `,
+    iconSize: [0, 0],
+    iconAnchor: [0, 0],
+  });
+};
+
+const LeafletMap: React.FC<{
+  position: { lat: number; lng: number } | null;
+  onPositionSelect: (pos: { lat: number; lng: number }, street?: string, city?: string) => void;
+  isDark: boolean;
+}> = ({ position, onPositionSelect, isDark }) => {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const mapRef = useRef<L.Map | null>(null);
+  const destMarkerRef = useRef<L.Marker | null>(null);
+  const lineRef = useRef<L.Polyline | null>(null);
+
+  useEffect(() => {
+    if (!containerRef.current || mapRef.current) return;
+
+    const initialCenter = position || STORE_ORIGIN;
+    const map = L.map(containerRef.current, {
+      center: [initialCenter.lat, initialCenter.lng],
+      zoom: 13,
+      zoomControl: true,
+      attributionControl: false,
+    });
+
+    const tileUrl = isDark
+      ? 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png'
+      : 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
+
+    L.tileLayer(tileUrl, {
+      maxZoom: 19,
+    }).addTo(map);
+
+    L.marker([STORE_ORIGIN.lat, STORE_ORIGIN.lng], {
+      icon: createKitchenIcon(),
+      interactive: true,
+    }).addTo(map);
+
+    map.on('click', async (e: L.LeafletMouseEvent) => {
+      const lat = e.latlng.lat;
+      const lng = e.latlng.lng;
+      const { street, city } = await reverseGeocodeNominatim(lat, lng);
+      onPositionSelect({ lat, lng }, street, city);
+    });
+
+    mapRef.current = map;
+
+    setTimeout(() => {
+      map.invalidateSize();
+    }, 200);
+
+    return () => {
+      map.remove();
+      mapRef.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    if (position) {
+      if (destMarkerRef.current) {
+        destMarkerRef.current.setLatLng([position.lat, position.lng]);
+      } else {
+        const marker = L.marker([position.lat, position.lng], {
+          icon: createDestinationIcon(),
+          draggable: true,
+        }).addTo(map);
+
+        marker.on('dragend', async () => {
+          const latLng = marker.getLatLng();
+          const { street, city } = await reverseGeocodeNominatim(latLng.lat, latLng.lng);
+          onPositionSelect({ lat: latLng.lat, lng: latLng.lng }, street, city);
+        });
+
+        destMarkerRef.current = marker;
+      }
+
+      if (lineRef.current) {
+        lineRef.current.setLatLngs([
+          [STORE_ORIGIN.lat, STORE_ORIGIN.lng],
+          [position.lat, position.lng],
+        ]);
+      } else {
+        lineRef.current = L.polyline(
+          [
+            [STORE_ORIGIN.lat, STORE_ORIGIN.lng],
+            [position.lat, position.lng],
+          ],
+          {
+            color: '#F28A08',
+            weight: 3,
+            dashArray: '6, 6',
+            opacity: 0.8,
+          }
+        ).addTo(map);
+      }
+    }
+  }, [position, onPositionSelect]);
+
+  return <div ref={containerRef} className="w-full h-full rounded-xl overflow-hidden z-0" />;
+};
+
 export const DeliveryLocationPicker: React.FC<DeliveryLocationPickerProps> = ({
   value,
   onChange,
@@ -471,22 +641,31 @@ export const DeliveryLocationPicker: React.FC<DeliveryLocationPickerProps> = ({
     });
   };
 
+  const [gpsNotice, setGpsNotice] = useState<string | null>(null);
+
   const handleLocateMe = () => {
     if (!navigator.geolocation) {
+      setGpsNotice('GPS is not supported by your browser.');
+      setTimeout(() => setGpsNotice(null), 4000);
       return;
     }
     setIsLocating(true);
+    setGpsNotice(null);
     navigator.geolocation.getCurrentPosition(
-      (pos) => {
+      async (pos) => {
         setIsLocating(false);
         const userPos = {
           lat: pos.coords.latitude,
           lng: pos.coords.longitude,
         };
-        handlePositionSelect(userPos);
+        const { street, city } = await reverseGeocodeNominatim(userPos.lat, userPos.lng);
+        handlePositionSelect(userPos, street, city);
       },
-      () => {
+      (err) => {
         setIsLocating(false);
+        console.warn('Geolocation error:', err.message);
+        setGpsNotice('Location access not permitted. Tap directly on the map to pin.');
+        setTimeout(() => setGpsNotice(null), 4000);
       },
       { enableHighAccuracy: true, timeout: 10000 }
     );
@@ -543,9 +722,15 @@ export const DeliveryLocationPicker: React.FC<DeliveryLocationPickerProps> = ({
           <span className="font-semibold text-[#24211E] dark:text-white font-['Lexend']">
             Shop Pickup:
           </span>
-          <span className="text-[#706A63] dark:text-[#A8A199] font-['Poppins']">
-            Arbegnoch St, Addis Ababa
-          </span>
+          <a
+            href="https://www.google.com/maps/search/?api=1&query=Arbegnoch+St,+Addis+Ababa"
+            target="_blank"
+            rel="noopener noreferrer"
+            title="Locate Perry Foods on Google Maps"
+            className="text-[#706A63] dark:text-[#A8A199] font-['Poppins'] hover:text-[#F28A08] dark:hover:text-[#F28A08] transition-colors underline"
+          >
+            Arbegnoch St, Addis Ababa (Locate Us)
+          </a>
         </div>
       )}
 
@@ -586,7 +771,14 @@ export const DeliveryLocationPicker: React.FC<DeliveryLocationPickerProps> = ({
             </div>
           </div>
 
-          {/* Interactive Google Map - Smaller compact box with stable rendering */}
+          {/* GPS Notice Banner if permission is denied or pending */}
+          {gpsNotice && (
+            <div className="px-2.5 py-1 rounded-lg bg-amber-500/10 border border-amber-500/30 text-[11px] text-[#F28A08] font-['Poppins']">
+              {gpsNotice}
+            </div>
+          )}
+
+          {/* Interactive Map (Google Maps if API key is provided, or full Leaflet OpenStreetMap fallback for GitHub deployment) */}
           {showMap && (
             <div className="relative h-44 sm:h-48 min-h-[176px] sm:min-h-[192px] w-full rounded-xl overflow-hidden border border-[#EDE5D9] dark:border-[#38332E] shadow-sm">
               {apiKey ? (
@@ -596,12 +788,11 @@ export const DeliveryLocationPicker: React.FC<DeliveryLocationPickerProps> = ({
                   isDark={isDark}
                 />
               ) : (
-                <div className="w-full h-full flex flex-col items-center justify-center p-3 bg-[#EDE5D9]/20 dark:bg-[#1E1B18] text-center">
-                  <MapPin className="w-6 h-6 text-[#F28A08] mb-1" />
-                  <span className="text-xs font-semibold text-[#24211E] dark:text-white">
-                    Google Maps Active
-                  </span>
-                </div>
+                <LeafletMap
+                  position={value.lat && value.lng ? { lat: value.lat, lng: value.lng } : null}
+                  onPositionSelect={handlePositionSelect}
+                  isDark={isDark}
+                />
               )}
             </div>
           )}
