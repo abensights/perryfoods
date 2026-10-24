@@ -1,5 +1,4 @@
-import { saveOrderToFirestore } from './orderFirestore';
-import { cleanText } from '../utils/cart';
+import { cleanText, isValidOrderId } from '../utils/cart';
 
 export const PERRY_APPS_SCRIPT_WEB_APP_URL =
   'https://script.google.com/macros/s/AKfycbxSLRcEka9z_KTqVpcHuA8Qfi2-LZCC7XYzzsxg0OO_g3cPuQhC_wQvoXPqjhnHXEjJ/exec';
@@ -42,17 +41,14 @@ export interface LiveSheetOrder {
 }
 
 /**
- * H3 & H4 — Register order via single POST request with formula neutralization.
- * Google Sheet stays private; customers do not read directly from the spreadsheet.
+ * H3, H4 & Audit Fix — Register order via single authenticated POST request.
+ * - Requires explicit json.status === 'success' from backend.
+ * - Removes false-success GET fallback entirely.
+ * - Eliminates duplicate Firestore writes (managed authoritative caller).
  */
 export async function appendOrderToGoogleSheet(
   order: OrderSheetPayload
 ): Promise<{ success: boolean; message: string }> {
-  // Safe backup to Firestore write-only inbox
-  saveOrderToFirestore(order).catch((err) => {
-    console.warn('Firestore backup write notice:', err);
-  });
-
   const totalNum = Math.max(0, Number(order.totalAmountBirr) || 0);
 
   const payload = {
@@ -66,14 +62,12 @@ export async function appendOrderToGoogleSheet(
     totalAmount: `${totalNum.toLocaleString()} Birr`,
     bank: cleanText(order.bankName, 50),
     account: cleanText(order.accountNumber, 50),
-    sms: cleanText(order.paymentSms, 500),
+    sms: cleanText(order.paymentSms, 250),
     orderVerified: 'Pending',
     orderDelivered: 'Pending',
   };
 
   try {
-    // 1. Single POST request with JSON payload
-    // text/plain prevents CORS preflight in browsers while delivering the full JSON body
     const res = await fetch(PERRY_APPS_SCRIPT_WEB_APP_URL, {
       method: 'POST',
       headers: {
@@ -82,36 +76,34 @@ export async function appendOrderToGoogleSheet(
       body: JSON.stringify(payload),
     });
 
-    if (res.ok) {
-      try {
-        const json = await res.json();
-        return {
-          success: true,
-          message: json.message || 'Order registered successfully!',
-        };
-      } catch {
-        // Continue
-      }
+    if (!res.ok) {
+      return {
+        success: false,
+        message: `Order server responded with status ${res.status}. Please try again.`,
+      };
     }
-  } catch (err) {
-    console.warn('Primary POST hand-off fallback to GET:', err);
-    // Backward-compatibility fallback for existing Apps Script deployment
-    try {
-      const params = new URLSearchParams(payload as Record<string, string>);
-      await fetch(`${PERRY_APPS_SCRIPT_WEB_APP_URL}?${params.toString()}`, {
-        method: 'GET',
-        mode: 'no-cors',
-      });
-    } catch {
-      // Ignore
-    }
-  }
 
-  return {
-    success: true,
-    message: 'Order registered successfully!',
-  };
+    const json = await res.json();
+    if (json && json.status === 'success') {
+      return {
+        success: true,
+        message: json.message || 'Order registered successfully!',
+      };
+    }
+
+    return {
+      success: false,
+      message: json?.message || 'Order registration could not be verified by the server. Please retry.',
+    };
+  } catch (err) {
+    console.warn('Order registration network error:', err);
+    return {
+      success: false,
+      message: 'Network connection issue while submitting order. Please check your internet connection and tap Submit again.',
+    };
+  }
 }
+
 
 /**
  * H2 — Sanitized order status check by Order ID only.
@@ -122,8 +114,8 @@ export async function fetchOrderFromWebApp(orderNo: string): Promise<LiveSheetOr
   const cleanNo = orderNo.trim();
   if (!cleanNo) return null;
 
-  // Validate format: must be valid order ID (e.g. PF-K7M2QX9TDA or legacy PF-123456)
-  if (!/^PF-[A-Za-z0-9]{6,16}$/i.test(cleanNo) && !/^\d{6,10}$/.test(cleanNo)) {
+  // Validate format: must be valid order ID (e.g. PF-K7M2QX9TDAR4W89P or legacy PF-123456)
+  if (!isValidOrderId(cleanNo) && !/^PF-[A-Za-z0-9]{6,24}$/i.test(cleanNo) && !/^\d{6,10}$/.test(cleanNo)) {
     return null;
   }
 

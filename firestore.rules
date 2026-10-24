@@ -9,8 +9,8 @@ service cloud.firestore {
       // C1: Orders are write-only inbox; visitors cannot list or get existing orders
       allow get, list: if false;
 
-      // C2 & H1: Strict validation on creation only
-      // Whitelist allowed fields, types, and length bounds
+      // C2, H1 & Audit Hardening: Strict schema validation on creation only
+      // Whitelist allowed fields, enforce types, and bound size of every single field
       function isValidNewOrder() {
         let d = request.resource.data;
         let allowedKeys = [
@@ -23,24 +23,40 @@ service cloud.firestore {
         ];
 
         return d.keys().hasOnly(allowedKeys) &&
-               // Document ID must match orderNo
+               // Document ID must strictly match orderNo
                orderId == d.orderNo &&
-               // Cryptographic order number format PF-[2-9A-HJ-NP-Z]{10} or legacy PF-[0-9]{6}
+               // Cryptographic order number format (PF-16 chars or legacy PF-6..24)
                d.orderNo is string &&
-               d.orderNo.matches('^PF-[2-9A-HJ-NP-Za-km-z0-9]{6,16}$') &&
-               // Customer details length limits
+               d.orderNo.matches('^PF-[2-9A-HJ-NP-Za-km-z0-9]{6,24}$') &&
+               // Customer details length and type limits
                d.customerName is string && d.customerName.size() >= 1 && d.customerName.size() <= 100 &&
+               d.customerNameLower is string && d.customerNameLower.size() >= 1 && d.customerNameLower.size() <= 100 &&
                d.phoneNumber is string && d.phoneNumber.size() <= 30 &&
-               // Delivery option constraint
+               d.phoneDigits is string && d.phoneDigits.size() <= 20 &&
+               // Dates
+               d.orderDate is string && d.orderDate.size() <= 30 &&
+               d.eventDeliveryDate is string && d.eventDeliveryDate.size() <= 50 &&
+               // Delivery parameters
                d.deliveryOption is string && (d.deliveryOption == 'pickup' || d.deliveryOption == 'delivery') &&
-               d.itemsSummary is string && d.itemsSummary.size() <= 1000 &&
-               // Reasonable total amounts: positive, capped at 1,000,000 Birr
+               d.deliveryLocation is string && d.deliveryLocation.size() <= 300 &&
+               d.deliveryAddress is string && d.deliveryAddress.size() <= 300 &&
+               d.deliveryFee is number && d.deliveryFee >= 0 && d.deliveryFee <= 100000 &&
+               // Financial calculations
                d.totalAmountBirr is number && d.totalAmountBirr >= 0 && d.totalAmountBirr <= 1000000 &&
+               d.totalAmount is string && d.totalAmount.size() <= 50 &&
+               d.itemsSummary is string && d.itemsSummary.size() <= 1000 &&
+               // Payment details
+               d.bankName is string && d.bankName.size() <= 50 &&
+               d.accountNumber is string && d.accountNumber.size() <= 50 &&
+               d.paymentSms is string && d.paymentSms.size() <= 300 &&
+               d.remark is string && d.remark.size() <= 300 &&
                // Status must always be forced to 'Pending' on creation
                d.orderVerified == 'Pending' &&
                d.orderDelivered == 'Pending' &&
-               // CreatedAt timestamp sanity check
-               d.createdAt is number;
+               // CreatedAt timestamp sanity check (within 10 minutes of server request time)
+               d.createdAt is number &&
+               request.time.toMillis() - d.createdAt < 600000 &&
+               d.createdAt <= request.time.toMillis() + 600000;
       }
 
       allow create: if isValidNewOrder();

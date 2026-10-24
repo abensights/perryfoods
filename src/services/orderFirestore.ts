@@ -1,7 +1,7 @@
 import { doc, setDoc } from 'firebase/firestore';
 import { db } from './firebase';
 import { OrderSheetPayload, LiveSheetOrder } from './googleSheets';
-import { neutralizeFormula, cleanText } from '../utils/cart';
+import { cleanText, sanitizePaymentSms } from '../utils/cart';
 
 /**
  * Normalizes phone numbers to standard format (e.g. 0911458705 or 0712345678)
@@ -37,7 +37,7 @@ export async function saveOrderToFirestore(order: OrderSheetPayload): Promise<vo
 
   try {
     const rawPhone = cleanText(order.phoneNumber || '', 30);
-    const phoneDigits = normalizePhoneDigits(rawPhone);
+    const phoneDigits = normalizePhoneDigits(rawPhone).slice(0, 20);
     const totalAmountBirr = Math.max(0, Math.min(1000000, Number(order.totalAmountBirr) || 0));
 
     const docData = {
@@ -46,19 +46,19 @@ export async function saveOrderToFirestore(order: OrderSheetPayload): Promise<vo
       customerNameLower: cleanText(order.customerName.toLowerCase(), 100),
       phoneNumber: rawPhone,
       phoneDigits,
-      orderDate: cleanText(order.orderDate || new Date().toISOString().split('T')[0], 20),
-      eventDeliveryDate: cleanText(order.eventDeliveryDate || 'TBD', 30),
+      orderDate: cleanText(order.orderDate || new Date().toISOString().split('T')[0], 30),
+      eventDeliveryDate: cleanText(order.eventDeliveryDate || 'TBD', 50),
       deliveryOption: order.deliveryOption === 'delivery' ? 'delivery' : 'pickup',
-      deliveryLocation: cleanText(order.deliveryLocation || 'N/A', 250),
-      deliveryAddress: cleanText(order.deliveryAddress || '', 250),
+      deliveryLocation: cleanText(order.deliveryLocation || 'N/A', 300),
+      deliveryAddress: cleanText(order.deliveryAddress || '', 300),
       deliveryFee: Math.max(0, Math.min(100000, Number(order.deliveryFee) || 0)),
       totalAmountBirr,
       totalAmount: `${totalAmountBirr.toLocaleString()} Birr`,
       itemsSummary: cleanText(order.itemsSummary || 'Catering', 1000),
       bankName: cleanText(order.bankName || 'N/A', 50),
       accountNumber: cleanText(order.accountNumber || 'N/A', 50),
-      paymentSms: cleanText(order.paymentSms || '', 500),
-      remark: cleanText(order.remark || '', 250),
+      paymentSms: sanitizePaymentSms(order.paymentSms || '', 250),
+      remark: cleanText(order.remark || '', 300),
       // C2: Status forced to 'Pending' on creation
       orderVerified: 'Pending',
       orderDelivered: 'Pending',

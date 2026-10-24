@@ -21,7 +21,13 @@ import {
   saveOrderToFirestore,
   isStrictExactOrderMatch,
 } from '../services/orderFirestore';
-import { generateSecureOrderId, validateAndSanitizeCart, cleanText } from '../utils/cart';
+import {
+  generateSecureOrderId,
+  validateAndSanitizeCart,
+  cleanText,
+  sanitizePaymentSms,
+  isValidOrderId,
+} from '../utils/cart';
 import { DeliveryLocationPicker, DeliveryLocationData } from './DeliveryLocationPicker';
 
 import cbeLogo from '../assets/CBE.jpg';
@@ -160,6 +166,7 @@ export const MyOrderSection: React.FC<MyOrderSectionProps> = ({
   const [submittedDeliveryInfo, setSubmittedDeliveryInfo] = useState<DeliveryLocationData | null>(null);
   const [hasAttemptedSubmit, setHasAttemptedSubmit] = useState(false);
   const [submissionError, setSubmissionError] = useState<string | null>(null);
+  const [isSubmittingOrder, setIsSubmittingOrder] = useState<boolean>(false);
 
   // Order status lookup state - initialized empty, only searches when Track is explicitly clicked
   const [statusSearchQuery, setStatusSearchQuery] = useState('');
@@ -223,11 +230,10 @@ export const MyOrderSection: React.FC<MyOrderSectionProps> = ({
       // Collect candidate Order IDs to check against the sheet
       const candidateOrderNos = new Set<string>();
 
-      // Check if query matches an order in local history (by Name, Phone, or Order ID)
+      // Check if query matches an order in local history (by Phone or Order ID)
       const localMatches = localHistory.filter((o) =>
         isStrictExactOrderMatch(q, {
           orderNo: o.orderNo,
-          customerName: o.customerName,
           phone: o.phone,
         })
       );
@@ -237,16 +243,16 @@ export const MyOrderSection: React.FC<MyOrderSectionProps> = ({
       });
 
       // If query is formatted like an Order ID, add it to candidate lookups
-      const isOrderIdFormat = /^PF-[A-Za-z0-9]{6,16}$/i.test(q) || /^\d{6,10}$/.test(q);
+      const isOrderIdFormat = isValidOrderId(q) || /^PF-[A-Za-z0-9]{6,24}$/i.test(q) || /^\d{6,10}$/.test(q);
       if (isOrderIdFormat) {
         candidateOrderNos.add(q.trim());
         if (!q.toUpperCase().startsWith('PF-')) {
           candidateOrderNos.add(`PF-${q.trim()}`);
         }
       } else if (candidateOrderNos.size === 0) {
-        // User searched by Name or Phone, but this device has no local order record
+        // User searched by Phone, but this device has no local order record
         setSearchStatusInputError(
-          'For customer privacy, name and phone lookups are only available on the device used to place the order. To track an order from any device, please enter the exact Order ID (e.g. PF-...).'
+          'For customer privacy, phone lookups are only available on the device used to place the order. To track an order from any device, please enter the exact Order ID (e.g. PF-...).'
         );
         setTrackedOrders([]);
         setIsSearchingStatus(false);
@@ -317,6 +323,7 @@ export const MyOrderSection: React.FC<MyOrderSectionProps> = ({
 
   const handleSubmitOrder = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmittingOrder) return;
     setHasAttemptedSubmit(true);
     setSubmissionError(null);
 
@@ -343,149 +350,161 @@ export const MyOrderSection: React.FC<MyOrderSectionProps> = ({
       return;
     }
 
-    // H1: Cryptographically secure, unguessable Order ID (e.g. PF-K7M2QX9TDA)
-    const ref = generateSecureOrderId();
-    const currentSms = cleanText(paymentSms, 500);
-    const capturedPhone = cleanText(phone.trim() || 'Not provided', 30);
-    const capturedName = cleanText(customerName.trim() || 'Valued Client', 100);
+    setIsSubmittingOrder(true);
 
-    // Recompute total strictly from catalog prices and verified delivery fee
-    const verifiedSubtotal = validatedItems.reduce((acc, curr) => acc + curr.totalBirr, 0);
-    const verifiedDeliveryFee = deliveryInfo.option === 'delivery' ? (deliveryInfo.deliveryFee || 100) : 0;
-    const verifiedTotal = verifiedSubtotal + verifiedDeliveryFee;
+    try {
+      // H1 & Medium: Cryptographically secure, unguessable Order ID (16 chars, ~80 bits entropy)
+      const ref = generateSecureOrderId();
+      // High Privacy Risk: Strip account balances and sensitive financial disclosures from SMS
+      const sanitizedSms = sanitizePaymentSms(paymentSms, 250);
+      const capturedPhone = cleanText(phone.trim() || 'Not provided', 30);
+      const capturedName = cleanText(customerName.trim() || 'Valued Client', 100);
 
-    setOrderReference(ref);
-    setSubmittedItems([...validatedItems]);
-    setSubmittedPaymentSms(currentSms);
-    setSubmittedTotalBirr(verifiedTotal);
-    setSubmittedSubtotalBirr(verifiedSubtotal);
-    setSubmittedDeliveryFeeBirr(verifiedDeliveryFee);
-    setSubmittedDeliveryInfo({ ...deliveryInfo });
+      // Recompute total strictly from catalog prices and verified delivery fee
+      const verifiedSubtotal = validatedItems.reduce((acc, curr) => acc + curr.totalBirr, 0);
+      const verifiedDeliveryFee = deliveryInfo.option === 'delivery' ? (deliveryInfo.deliveryFee || 100) : 0;
+      const verifiedTotal = verifiedSubtotal + verifiedDeliveryFee;
 
-    // Clear active payment SMS input so the field is blank when returning
-    setPaymentSms('');
-    setOrderSubmitted(true);
-    if (onOrderSubmittedStateChange) {
-      onOrderSubmittedStateChange(true);
-    }
-    // Remove active cart popup once success screen is displayed
-    onClearOrder();
+      const itemsSummary = validatedItems
+        .map((entry) => {
+          const isBuffet = entry.item.category === 'buffet';
+          const minG = isBuffet ? (entry.item.minGuests || 30) : 1;
+          return isBuffet
+            ? `${entry.quantity}x ${entry.item.name} (${minG} guests pkg)`
+            : `${entry.quantity}x ${entry.item.name}`;
+        })
+        .join(', ');
 
-    // Ensure the viewport stays directly on the success screen
-    setTimeout(() => {
-      const el = document.getElementById('my-order');
-      if (el) {
-        const headerOffset = window.innerWidth < 768 ? 70 : 80;
-        const elementPosition = el.getBoundingClientRect().top;
-        const offsetPosition = elementPosition + window.scrollY - headerOffset;
-        window.scrollTo({
-          top: Math.max(0, offsetPosition),
-          behavior: 'smooth',
+      // Format Google Maps delivery location / pin info
+      const deliveryLocationStr =
+        deliveryInfo.option === 'delivery'
+          ? `${deliveryInfo.address || `${deliveryInfo.streetName || 'Arbegnoch St'}, ${deliveryInfo.cityName || 'Addis Ababa'}`}${
+              deliveryInfo.lat && deliveryInfo.lng
+                ? ` (${deliveryInfo.lat.toFixed(6)}, ${deliveryInfo.lng.toFixed(6)})`
+                : ''
+            }${deliveryInfo.mapsUrl ? ` [Map Pin: ${deliveryInfo.mapsUrl}]` : ''}`
+          : 'Shop Pickup (Arbegnoch St, Addis Ababa)';
+
+      const orderPayload = {
+        orderNo: ref,
+        customerName: capturedName,
+        phoneNumber: capturedPhone,
+        deliveryLocation: deliveryLocationStr,
+        deliveryOption: deliveryInfo.option,
+        deliveryAddress: deliveryInfo.address,
+        deliveryLocationUrl: deliveryInfo.mapsUrl,
+        deliveryFee: verifiedDeliveryFee,
+        deliveryCoordinates:
+          deliveryInfo.lat && deliveryInfo.lng
+            ? { lat: deliveryInfo.lat, lng: deliveryInfo.lng }
+            : undefined,
+        orderDate: new Date().toISOString().split('T')[0],
+        eventDeliveryDate: deliveryDate || 'TBD',
+        totalAmountBirr: verifiedTotal,
+        bankName: selectedBank.shortName,
+        accountNumber: selectedBank.accountNumber,
+        paymentSms: sanitizedSms,
+        remark: cleanText(remark, 250),
+        itemsSummary,
+        orderVerified: 'Pending',
+        orderDelivered: 'Pending',
+      };
+
+      // 1. Authoritative persistence: POST to Google Apps Script Web App
+      const res = await appendOrderToGoogleSheet(orderPayload);
+      if (!res.success) {
+        setSubmissionError(res.message || 'Unable to record order. Please check your connection and try again.');
+        setIsSubmittingOrder(false);
+        return;
+      }
+
+      // 2. Safe secondary backup to Firestore write-only inbox (single caller)
+      saveOrderToFirestore(orderPayload).catch((err) => {
+        console.warn('Firestore backup write notice:', err);
+      });
+
+      // 3. Local device cache for client status tracking
+      if (onConfirmOrderSubmit) {
+        onConfirmOrderSubmit({
+          items: validatedItems,
+          totalBirr: verifiedTotal,
+          customerName: capturedName,
+          phone: capturedPhone,
+          date: deliveryDate || new Date().toISOString().split('T')[0],
+          remark: cleanText(remark, 250),
+          selectedBank,
+          paymentSms: sanitizedSms,
         });
       }
-    }, 60);
 
-    const itemsSummary = validatedItems
-      .map((entry) => {
-        const isBuffet = entry.item.category === 'buffet';
-        const minG = isBuffet ? (entry.item.minGuests || 30) : 1;
-        return isBuffet
-          ? `${entry.quantity}x ${entry.item.name} (${minG} guests pkg)`
-          : `${entry.quantity}x ${entry.item.name}`;
-      })
-      .join(', ');
-
-    if (onConfirmOrderSubmit) {
-      onConfirmOrderSubmit({
-        items: validatedItems,
-        totalBirr: verifiedTotal,
+      const newOrder: OrderRecord = {
+        orderNo: ref,
         customerName: capturedName,
-        phone: capturedPhone,
-        date: deliveryDate || new Date().toISOString().split('T')[0],
-        remark: cleanText(remark, 250),
-        selectedBank,
-        paymentSms: currentSms,
-      });
+        phone: capturedPhone || 'Not provided',
+        orderDate: new Date().toISOString().split('T')[0],
+        deliveryDate: deliveryDate || 'TBD',
+        deliveryOption: deliveryInfo.option,
+        deliveryAddress: deliveryInfo.address,
+        deliveryLocationUrl: deliveryInfo.mapsUrl,
+        deliveryFee: verifiedDeliveryFee,
+        distanceKm: deliveryInfo.distanceKm,
+        totalAmountBirr: verifiedTotal,
+        itemsSummary,
+        bank: selectedBank.shortName,
+        status: 'Order Placed',
+        step: 1,
+        createdAt: Date.now(),
+      };
+
+      try {
+        const historyStr = localStorage.getItem('perry_orders_history');
+        const history: OrderRecord[] = historyStr ? JSON.parse(historyStr) : [];
+        history.push(newOrder);
+        localStorage.setItem('perry_orders_history', JSON.stringify(history));
+      } catch {
+        // ignore
+      }
+
+      try {
+        localStorage.removeItem('perry_order_form_state');
+      } catch {
+        // ignore
+      }
+
+      // 4. Update UI states upon confirmed success
+      setOrderReference(ref);
+      setSubmittedItems([...validatedItems]);
+      setSubmittedPaymentSms(sanitizedSms);
+      setSubmittedTotalBirr(verifiedTotal);
+      setSubmittedSubtotalBirr(verifiedSubtotal);
+      setSubmittedDeliveryFeeBirr(verifiedDeliveryFee);
+      setSubmittedDeliveryInfo({ ...deliveryInfo });
+      setPaymentSms('');
+      setOrderSubmitted(true);
+      if (onOrderSubmittedStateChange) {
+        onOrderSubmittedStateChange(true);
+      }
+      onClearOrder();
+
+      // Ensure the viewport stays directly on the success screen
+      setTimeout(() => {
+        const el = document.getElementById('my-order');
+        if (el) {
+          const headerOffset = window.innerWidth < 768 ? 70 : 80;
+          const elementPosition = el.getBoundingClientRect().top;
+          const offsetPosition = elementPosition + window.scrollY - headerOffset;
+          window.scrollTo({
+            top: Math.max(0, offsetPosition),
+            behavior: 'smooth',
+          });
+        }
+      }, 60);
+    } catch (err) {
+      console.error('Order submission error:', err);
+      setSubmissionError('An unexpected error occurred while placing your order. Please retry.');
+    } finally {
+      setIsSubmittingOrder(false);
     }
-
-    // Save order record locally for real-time status tracking
-    const newOrder: OrderRecord = {
-      orderNo: ref,
-      customerName: capturedName,
-      phone: capturedPhone || 'Not provided',
-      orderDate: new Date().toISOString().split('T')[0],
-      deliveryDate: deliveryDate || 'TBD',
-      deliveryOption: deliveryInfo.option,
-      deliveryAddress: deliveryInfo.address,
-      deliveryLocationUrl: deliveryInfo.mapsUrl,
-      deliveryFee: verifiedDeliveryFee,
-      distanceKm: deliveryInfo.distanceKm,
-      totalAmountBirr: verifiedTotal,
-      itemsSummary,
-      bank: selectedBank.shortName,
-      status: 'Order Placed',
-      step: 1,
-      createdAt: Date.now(),
-    };
-
-    try {
-      const historyStr = localStorage.getItem('perry_orders_history');
-      const history: OrderRecord[] = historyStr ? JSON.parse(historyStr) : [];
-      history.push(newOrder);
-      localStorage.setItem('perry_orders_history', JSON.stringify(history));
-    } catch {
-      // ignore
-    }
-
-    // Clear saved draft form so the section is completely blank for any new requests
-    try {
-      localStorage.removeItem('perry_order_form_state');
-    } catch {
-      // ignore
-    }
-
-    // Format Google Maps delivery location / pin info
-    const deliveryLocationStr =
-      deliveryInfo.option === 'delivery'
-        ? `${deliveryInfo.address || `${deliveryInfo.streetName || 'Arbegnoch St'}, ${deliveryInfo.cityName || 'Addis Ababa'}`}${
-            deliveryInfo.lat && deliveryInfo.lng
-              ? ` (${deliveryInfo.lat.toFixed(6)}, ${deliveryInfo.lng.toFixed(6)})`
-              : ''
-          }${deliveryInfo.mapsUrl ? ` [Map Pin: ${deliveryInfo.mapsUrl}]` : ''}`
-        : 'Shop Pickup (Arbegnoch St, Addis Ababa)';
-
-    // Automatically send order, location info, and Google Maps pin to Firestore and Google Sheet
-    const orderPayload = {
-      orderNo: ref,
-      customerName: capturedName,
-      phoneNumber: capturedPhone,
-      deliveryLocation: deliveryLocationStr,
-      deliveryOption: deliveryInfo.option,
-      deliveryAddress: deliveryInfo.address,
-      deliveryLocationUrl: deliveryInfo.mapsUrl,
-      deliveryFee: verifiedDeliveryFee,
-      deliveryCoordinates:
-        deliveryInfo.lat && deliveryInfo.lng
-          ? { lat: deliveryInfo.lat, lng: deliveryInfo.lng }
-          : undefined,
-      orderDate: new Date().toISOString().split('T')[0],
-      eventDeliveryDate: deliveryDate || 'TBD',
-      totalAmountBirr: verifiedTotal,
-      bankName: selectedBank.shortName,
-      accountNumber: selectedBank.accountNumber,
-      paymentSms: currentSms,
-      remark: cleanText(remark, 250),
-      itemsSummary,
-      orderVerified: 'Pending',
-      orderDelivered: 'Pending',
-    };
-
-    saveOrderToFirestore(orderPayload).catch((err) => {
-      console.warn('Firestore direct write warning:', err);
-    });
-    appendOrderToGoogleSheet(orderPayload).catch((err) => {
-      console.warn('Google Sheet append warning:', err);
-    });
   };
 
   const handleResetForNewOrder = () => {
@@ -552,11 +571,6 @@ export const MyOrderSection: React.FC<MyOrderSectionProps> = ({
               <h3 className="font-['Lexend'] text-2xl sm:text-3xl font-bold uppercase tracking-tight text-[#24211E] dark:text-[#F7F4EF]">
                 My Order
               </h3>
-              {totalItemsCount > 0 && (
-                <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-[#F28A08] text-white">
-                  {totalItemsCount} {totalItemsCount === 1 ? 'item' : 'items'}
-                </span>
-              )}
             </div>
             <p className="text-xs sm:text-sm text-[#706A63] dark:text-[#A8A199] mt-0.5">
               Review your catering selection, adjust portions, and place your order.
@@ -820,7 +834,7 @@ export const MyOrderSection: React.FC<MyOrderSectionProps> = ({
                       Check Order Status
                     </h4>
                     <p className="text-[11px] text-[#706A63] dark:text-[#A8A199]">
-                      Track order by Order ID, phone number, or name
+                      Track order by Order ID or phone number
                     </p>
                   </div>
                 </div>
@@ -838,9 +852,9 @@ export const MyOrderSection: React.FC<MyOrderSectionProps> = ({
                         setStatusSearchQuery(e.target.value);
                         if (searchStatusInputError) setSearchStatusInputError(null);
                         if (!e.target.value.trim()) {
-                          setHasSearchedStatus(false);
-                          setTrackedOrders([]);
-                          setLastSearchedQuery('');
+                           setHasSearchedStatus(false);
+                           setTrackedOrders([]);
+                           setLastSearchedQuery('');
                         }
                       }}
                       onKeyDown={(e) => {
@@ -850,7 +864,7 @@ export const MyOrderSection: React.FC<MyOrderSectionProps> = ({
                         }
                       }}
                       maxLength={50}
-                      placeholder="Order ID (e.g. PF-...), phone, or name..."
+                      placeholder="Order ID (e.g. PF-...) or phone..."
                       className="w-full pl-9 pr-3 py-2 text-xs sm:text-sm rounded-xl bg-white dark:bg-[#1E1B18] border border-[#EDE5D9] dark:border-[#38332E] text-[#24211E] dark:text-white placeholder-[#706A63]/60 focus:outline-none focus:border-[#F28A08] transition-colors"
                     />
                   </div>
@@ -1070,12 +1084,12 @@ export const MyOrderSection: React.FC<MyOrderSectionProps> = ({
                 ) : hasSearchedStatus && lastSearchedQuery.length > 0 ? (
                   <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-center font-['Poppins']">
                     <p className="text-xs text-amber-700 dark:text-amber-400 font-medium">
-                      No order found matching &quot;{lastSearchedQuery}&quot;. Please verify the Order ID (e.g. PF-...), phone number, or customer name.
+                      No order found matching &quot;{lastSearchedQuery}&quot;. Please verify the Order ID (e.g. PF-...) or phone number.
                     </p>
                   </div>
                 ) : (
                   <div className="text-center py-3 px-3 text-xs text-[#706A63] dark:text-[#A8A199] font-['Poppins']">
-                    <span>Enter your Order ID (e.g. PF-XXXXXX), phone number, or customer name and click Track to check status live from our table.</span>
+                    <span>Enter your Order ID (e.g. PF-XXXXXX) or phone number and click Track to check status live from our table.</span>
                   </div>
                 )}
               </div>
@@ -1320,10 +1334,17 @@ export const MyOrderSection: React.FC<MyOrderSectionProps> = ({
                     variant="primary"
                     size="md"
                     type="submit"
-                    disabled={orderItems.length === 0}
-                    className="w-full justify-center"
+                    disabled={orderItems.length === 0 || isSubmittingOrder}
+                    className="w-full justify-center gap-2"
                   >
-                    <span>Place Order</span>
+                    {isSubmittingOrder ? (
+                      <>
+                        <RefreshCw className="w-4 h-4 animate-spin" />
+                        <span>Confirming & Placing Order...</span>
+                      </>
+                    ) : (
+                      <span>Place Order</span>
+                    )}
                   </Button>
                 </div>
               </form>

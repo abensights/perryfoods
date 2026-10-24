@@ -76,27 +76,48 @@ export function validateAndSanitizeCart(rawItems: unknown): CartItemEntry[] {
 }
 
 /**
- * H1 — Cryptographically secure order ID generator.
+ * H1 & Medium — Cryptographically secure order ID generator.
  * Uses Web Crypto API getRandomValues with a 32-character unambiguous alphabet.
- * 32^10 ≈ 1.12 * 10^15 (approx. 2^50 combinations) with 0 collision risk.
- * Output format: PF-XXXXXXXXXX (e.g. PF-K7M2QX9TDA)
+ * Generates 16 characters = 32^16 ≈ 1.2 * 10^24 (approx. 2^80 combinations).
+ * Fails closed if cryptographic RNG is unavailable (no insecure Math.random fallback).
+ * Output format: PF-XXXXXXXXXXXXXXXX (e.g. PF-K7M2QX9TDAR4W89P)
  */
 const BASE32_ALPHABET = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
 
-export function generateSecureOrderId(): string {
-  if (typeof crypto !== 'undefined' && typeof crypto.getRandomValues === 'function') {
-    const bytes = new Uint8Array(10);
-    crypto.getRandomValues(bytes);
-    let id = '';
-    for (let i = 0; i < 10; i++) {
-      id += BASE32_ALPHABET[bytes[i] % BASE32_ALPHABET.length];
-    }
-    return `PF-${id}`;
-  }
-  // Fallback for non-crypto environments
-  let fallbackId = '';
-  for (let i = 0; i < 10; i++) {
-    fallbackId += BASE32_ALPHABET[Math.floor(Math.random() * BASE32_ALPHABET.length)];
-  }
-  return `PF-${fallbackId}`;
+export const ORDER_ID_REGEX = /^PF-[2-9A-HJ-NP-Za-km-z0-9]{6,24}$/i;
+
+export function isValidOrderId(orderNo: string): boolean {
+  if (!orderNo || typeof orderNo !== 'string') return false;
+  return ORDER_ID_REGEX.test(orderNo.trim());
 }
+
+export function generateSecureOrderId(): string {
+  if (typeof crypto === 'undefined' || typeof crypto.getRandomValues !== 'function') {
+    throw new Error('Cryptographically secure RNG unavailable. Cannot generate order ID.');
+  }
+
+  const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
+  let id = '';
+  for (let i = 0; i < 16; i++) {
+    id += BASE32_ALPHABET[bytes[i] % BASE32_ALPHABET.length];
+  }
+  return `PF-${id}`;
+}
+
+/**
+ * High Privacy Risk — Sanitizes payment SMS confirmation.
+ * Strips account balances and sensitive financial metadata while retaining
+ * transaction reference codes and verification snippets needed for order auditing.
+ */
+export function sanitizePaymentSms(input: string | undefined | null, maxLength = 250): string {
+  if (!input) return '';
+  let cleaned = String(input).trim();
+
+  // Strip balance disclosures often appended in mobile banking SMS
+  cleaned = cleaned.replace(/(?:available\s*balance|current\s*balance|balance|acct\s*bal|rem\s*bal)[^\w\d]*:?\s*[\d,.]+(?:\s*(?:etb|birr|br))?/gi, '');
+  cleaned = cleaned.replace(/\s{2,}/g, ' ').trim();
+
+  return cleanText(cleaned, maxLength);
+}
+

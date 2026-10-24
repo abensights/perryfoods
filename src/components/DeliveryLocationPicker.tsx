@@ -51,6 +51,13 @@ export const STORE_ORIGIN = {
   city: 'Addis Ababa',
 };
 
+// Central Addis Ababa default camera reference for delivery pinning
+export const ADDIS_ABABA_CITY_CENTER = {
+  lat: 9.025,
+  lng: 38.755,
+  name: 'Addis Ababa',
+};
+
 /**
  * Computes direct distance between two coordinate pairs in kilometers using the Haversine formula
  */
@@ -329,8 +336,8 @@ const MapController: React.FC<{
       <Map
         mapId="DEMO_MAP_ID"
         internalUsageAttributionIds={['gmp_mcp_codeassist_v1_aistudio']}
-        defaultCenter={position || STORE_ORIGIN}
-        defaultZoom={14}
+        defaultCenter={position || ADDIS_ABABA_CITY_CENTER}
+        defaultZoom={13}
         reuseMaps={true}
         gestureHandling="greedy"
         disableDefaultUI={false}
