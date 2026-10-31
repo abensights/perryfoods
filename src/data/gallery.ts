@@ -475,7 +475,7 @@ export const galleryCollectionsData: GalleryCollection[] = [
         id: 'photo-bakery-07',
         title: '07. Honey Cookies',
         category: 'Cookies',
-        image: butterCookiesPackedImg,
+        image: cookieCateringImg,
         imageAlt: '07. Honey Cookies',
         caption: 'Freshly baked honey cookies infused with the warm, natural sweetness of pure honey.',
       },

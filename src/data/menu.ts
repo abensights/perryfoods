@@ -779,7 +779,7 @@ export const menuItemsData: MenuItem[] = [
     categoryLabel: 'Cookies',
     description:
       'Freshly baked honey cookies infused with the warm, natural sweetness of honey. With a golden finish, a delicate texture, and a comforting aroma, these cookies offer a satisfying balance of sweetness and crispness, making them a delightful companion to Ethiopian coffee, tea, and special gatherings.',
-    image: butterCookiesPackedImg,
+    image: cookieCateringImg,
     imageAlt: '07. Honey Cookies',
     priceBirr: 1300,
     unit: 'box',
