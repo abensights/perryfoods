@@ -404,23 +404,6 @@ export const reverseGeocodeNominatim = async (
   return { street: 'Pinned Location', city: 'Addis Ababa' };
 };
 
-const createKitchenIcon = () => {
-  return L.divIcon({
-    className: 'custom-kitchen-marker',
-    html: `
-      <div style="display:flex;flex-direction:column;align-items:center;transform:translate(-50%,-100%);pointer-events:none;">
-        <span style="background:#24211E;color:#FFFFFF;border:1px solid #F28A08;padding:2px 6px;border-radius:6px;font-size:10px;font-weight:700;font-family:Lexend,sans-serif;white-space:nowrap;margin-bottom:2px;box-shadow:0 2px 6px rgba(0,0,0,0.35);">Perry Kitchen</span>
-        <svg width="26" height="26" viewBox="0 0 24 24" fill="#24211E" stroke="#F28A08" stroke-width="2">
-          <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/>
-          <circle cx="12" cy="9" r="2.5" fill="#F28A08"/>
-        </svg>
-      </div>
-    `,
-    iconSize: [0, 0],
-    iconAnchor: [0, 0],
-  });
-};
-
 const createDestinationIcon = () => {
   return L.divIcon({
     className: 'custom-destination-marker',
@@ -446,12 +429,11 @@ const LeafletMap: React.FC<{
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
   const destMarkerRef = useRef<L.Marker | null>(null);
-  const lineRef = useRef<L.Polyline | null>(null);
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
 
-    const initialCenter = position || STORE_ORIGIN;
+    const initialCenter = position || ADDIS_ABABA_CITY_CENTER;
     const map = L.map(containerRef.current, {
       center: [initialCenter.lat, initialCenter.lng],
       zoom: 13,
@@ -466,11 +448,6 @@ const LeafletMap: React.FC<{
       maxZoom: 19,
       subdomains: ['a', 'b', 'c'],
       attribution: '&copy; OpenStreetMap contributors',
-    }).addTo(map);
-
-    L.marker([STORE_ORIGIN.lat, STORE_ORIGIN.lng], {
-      icon: createKitchenIcon(),
-      interactive: true,
     }).addTo(map);
 
     map.on('click', async (e: L.LeafletMouseEvent) => {
@@ -520,26 +497,9 @@ const LeafletMap: React.FC<{
 
         destMarkerRef.current = marker;
       }
-
-      if (lineRef.current) {
-        lineRef.current.setLatLngs([
-          [STORE_ORIGIN.lat, STORE_ORIGIN.lng],
-          [position.lat, position.lng],
-        ]);
-      } else {
-        lineRef.current = L.polyline(
-          [
-            [STORE_ORIGIN.lat, STORE_ORIGIN.lng],
-            [position.lat, position.lng],
-          ],
-          {
-            color: '#F28A08',
-            weight: 3,
-            dashArray: '6, 6',
-            opacity: 0.8,
-          }
-        ).addTo(map);
-      }
+    } else if (destMarkerRef.current) {
+      destMarkerRef.current.remove();
+      destMarkerRef.current = null;
     }
   }, [position, onPositionSelect, isDark]);
 
@@ -591,13 +551,12 @@ export const DeliveryLocationPicker: React.FC<DeliveryLocationPickerProps> = ({
 
   const canUseGoogleMaps = Boolean(apiKey && !googleMapsError);
 
-  // Initial distance calculation if lat/lng are set
+  // Coordinate of pinned delivery destination (null if not yet pinned)
   const currentCoords = useMemo(() => {
     if (value.lat && value.lng) {
       return { lat: value.lat, lng: value.lng };
     }
-    // Default to starting coordinates for camera centering
-    return STORE_ORIGIN;
+    return null;
   }, [value.lat, value.lng]);
 
   // Recalculate delivery fee if order items change while delivery is selected
@@ -629,32 +588,38 @@ export const DeliveryLocationPicker: React.FC<DeliveryLocationPickerProps> = ({
         address: `${STORE_ORIGIN.street}, ${STORE_ORIGIN.city}`,
       });
     } else {
-      // Default to delivery with base rate
-      const targetLat = value.lat ?? STORE_ORIGIN.lat;
-      const targetLng = value.lng ?? STORE_ORIGIN.lng;
-      const dist = calculateDistanceKm(
-        STORE_ORIGIN.lat,
-        STORE_ORIGIN.lng,
-        targetLat,
-        targetLng
-      );
-      const fee = calculateDeliveryFee(dist, orderItems);
-      const mapsUrl = `https://www.google.com/maps?q=${targetLat.toFixed(6)},${targetLng.toFixed(6)}`;
-
-      onChange({
-        ...value,
-        option: 'delivery',
-        lat: targetLat,
-        lng: targetLng,
-        distanceKm: dist,
-        deliveryFee: fee,
-        mapsUrl,
-        streetName: value.streetName || STORE_ORIGIN.street,
-        cityName: value.cityName || STORE_ORIGIN.city,
-        address:
-          value.address ||
-          `${value.streetName || STORE_ORIGIN.street}, ${value.cityName || STORE_ORIGIN.city}`,
-      });
+      // Switching to delivery: keep destination unpinned until customer pins on map
+      // Distance is evaluated against kitchen origin strictly in the background
+      if (value.lat && value.lng) {
+        const dist = calculateDistanceKm(
+          STORE_ORIGIN.lat,
+          STORE_ORIGIN.lng,
+          value.lat,
+          value.lng
+        );
+        const fee = calculateDeliveryFee(dist, orderItems);
+        const mapsUrl = `https://www.google.com/maps?q=${value.lat.toFixed(6)},${value.lng.toFixed(6)}`;
+        onChange({
+          ...value,
+          option: 'delivery',
+          distanceKm: dist,
+          deliveryFee: fee,
+          mapsUrl,
+        });
+      } else {
+        onChange({
+          ...value,
+          option: 'delivery',
+          lat: undefined,
+          lng: undefined,
+          distanceKm: 0,
+          deliveryFee: 0,
+          mapsUrl: undefined,
+          streetName: undefined,
+          cityName: undefined,
+          address: '',
+        });
+      }
     }
   };
 
