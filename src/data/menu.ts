@@ -44,6 +44,7 @@ import cupcakeImg from '../assets/Menu/Cupcake.jpg';
 import croissantPackedImg from '../assets/Menu/Croissant packed.jpg';
 import croissantChocImg from '../assets/Menu/Croissant with Chocolate.jpg';
 
+import butterCookiesPackedImg from '../assets/Menu/Butter Cookies packed.jpg';
 import butterCookiesImg from '../assets/Menu/Butter Cookies.jpg';
 import oatCookiesImg from '../assets/Menu/Oat Cookies.jpg';
 import teffCookiesImg from '../assets/Menu/Teff Cookies.jpg';
@@ -632,6 +633,26 @@ export const menuItemsData: MenuItem[] = [
 
   // 4. Cookies (Freshly baked, crisp & made to share)
   {
+    id: 'cookies-butter',
+    name: 'Butter Cookies',
+    category: 'cookies-muffins',
+    categoryLabel: 'Cookies',
+    description:
+      'Freshly baked butter cookies made with rich butter and carefully selected ingredients, creating a delicate crumb, lightly crisp edges, and a melt-in-the-mouth texture. Their familiar buttery aroma and gentle sweetness make them a timeless bakery favorite, especially when enjoyed alongside traditional Ethiopian coffee or tea.',
+    image: butterCookiesPackedImg,
+    imageAlt: 'Butter Cookies',
+    priceBirr: 1000,
+    unit: 'box',
+    priceLabel: 'Price (per Box)',
+    hideUnitSuffix: true,
+    highlights: [
+      'Rich buttery flavor with a delicate, melt-in-the-mouth texture',
+      'Lightly golden finish with crisp edges and a tender center',
+      'Perfect for Ethiopian coffee ceremonies, afternoon tea, gift boxes, and celebration platters',
+    ],
+    servesInfo: 'Box of 18 cookies',
+  },
+  {
     id: 'cookies-01-orange',
     name: '01. Orange Cookies',
     category: 'cookies-muffins',
@@ -758,7 +779,7 @@ export const menuItemsData: MenuItem[] = [
     categoryLabel: 'Cookies',
     description:
       'Freshly baked honey cookies infused with the warm, natural sweetness of honey. With a golden finish, a delicate texture, and a comforting aroma, these cookies offer a satisfying balance of sweetness and crispness, making them a delightful companion to Ethiopian coffee, tea, and special gatherings.',
-    image: gingerSpiceCookiesImg,
+    image: butterCookiesPackedImg,
     imageAlt: '07. Honey Cookies',
     priceBirr: 1300,
     unit: 'box',

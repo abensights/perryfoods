@@ -1161,7 +1161,13 @@ export const MyOrderSection: React.FC<MyOrderSectionProps> = ({
                       autoComplete="off"
                       min={new Date().toISOString().split('T')[0]}
                       value={deliveryDate}
-                      onClick={(e) => e.currentTarget.showPicker?.()}
+                      onClick={(e) => {
+                        try {
+                          e.currentTarget.showPicker?.();
+                        } catch {
+                          // Cross-origin iframe or browser security restriction: native click handles picker
+                        }
+                      }}
                       onChange={(e) => {
                         const today = new Date().toISOString().split('T')[0];
                         if (e.target.value && e.target.value < today) {

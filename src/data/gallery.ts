@@ -36,6 +36,7 @@ import fastingCakeImg from '../assets/Menu/Fasting Cake.webp';
 import fastingPastryBoxImg from '../assets/Menu/Fasting Pastry Box.jpg';
 import savoryPastrySambusaImg from '../assets/Menu/Savory Pastry & Sambusa.jpg';
 
+import butterCookiesPackedImg from '../assets/Menu/Butter Cookies packed.jpg';
 import butterCookiesImg from '../assets/Menu/Butter Cookies.jpg';
 import oatCookiesImg from '../assets/Menu/Oat Cookies.jpg';
 import teffCookiesImg from '../assets/Menu/Teff Cookies.jpg';
@@ -410,7 +411,7 @@ export const galleryCollectionsData: GalleryCollection[] = [
     title: 'Cookies',
     category: 'Cookies',
     filterTag: 'cookies-muffins',
-    photoCount: 7,
+    photoCount: 8,
     mainPhoto: {
       id: 'photo-bakery-01',
       title: '01. Orange Cookies',
@@ -447,6 +448,14 @@ export const galleryCollectionsData: GalleryCollection[] = [
     ],
     extraPhotos: [
       {
+        id: 'photo-bakery-butter',
+        title: 'Butter Cookies',
+        category: 'Cookies',
+        image: butterCookiesPackedImg,
+        imageAlt: 'Butter Cookies',
+        caption: 'Freshly baked butter cookies made with rich butter, delicate crumb, and melt-in-the-mouth texture.',
+      },
+      {
         id: 'photo-bakery-05',
         title: '05. Lemon Cookies',
         category: 'Cookies',
@@ -466,7 +475,7 @@ export const galleryCollectionsData: GalleryCollection[] = [
         id: 'photo-bakery-07',
         title: '07. Honey Cookies',
         category: 'Cookies',
-        image: gingerSpiceCookiesImg,
+        image: butterCookiesPackedImg,
         imageAlt: '07. Honey Cookies',
         caption: 'Freshly baked honey cookies infused with the warm, natural sweetness of pure honey.',
       },
